@@ -1,0 +1,28 @@
+modLoader="javafml"
+loaderVersion="[31,)"
+issueTrackerURL="https://github.com/Thutmose/Thut/issues"
+
+
+[[mods]]
+    modId="thutcore"
+    version="${file.jarVersion}"
+    displayName="Thut Core"
+    authors="Thutmose"
+    description='''
+    This is a library of shared functionality for my mods.
+    '''
+[[mods]]
+    modId="thutcrafts"
+    version="${file.jarVersion}"
+    displayName="Thut Crafts"
+    authors="Thutmose"
+    description='''
+    Tech Demo mod for testing the elevator mod updates.
+    '''
+    
+[[dependencies.thutcore]]
+    modId="minecraft"
+    mandatory=true
+    versionRange="version_mc"
+    ordering="NONE"
+    side="BOTH"
