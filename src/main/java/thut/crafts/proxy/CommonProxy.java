@@ -1,4 +1,4 @@
-package thut.crafts;
+package thut.crafts.proxy;
 
 import net.minecraft.entity.player.PlayerEntity;
 import net.minecraft.item.ItemStack;
@@ -21,6 +21,7 @@ import thut.api.entity.blockentity.IBlockEntity;
 import thut.api.maths.Vector3;
 import thut.core.common.Proxy;
 import thut.core.common.network.EntityUpdate;
+import thut.crafts.ThutCrafts;
 import thut.crafts.entity.EntityCraft;
 
 public class CommonProxy implements Proxy
@@ -29,12 +30,12 @@ public class CommonProxy implements Proxy
     public void interactRightClickBlock(final PlayerInteractEvent.RightClickBlock evt)
     {
         if (evt.getHand() == Hand.OFF_HAND || evt.getWorld().isRemote || evt.getItemStack().isEmpty() || !evt
-                .getPlayer().isShiftKeyDown() || evt.getItemStack().getItem() != ThutCrafts.CRAFTMAKER) return;
+                .getPlayer().isSneaking() || evt.getItemStack().getItem() != ThutCrafts.CRAFTMAKER) return;
         final ItemStack itemstack = evt.getItemStack();
         final PlayerEntity playerIn = evt.getPlayer();
         final World worldIn = evt.getWorld();
         final BlockPos pos = evt.getPos();
-        if (itemstack.hasTag() && playerIn.isShiftKeyDown() && itemstack.getTag().contains("min"))
+        if (itemstack.hasTag() && playerIn.isSneaking() && itemstack.getTag().contains("min"))
         {
             final CompoundNBT minTag = itemstack.getTag().getCompound("min");
             BlockPos min = pos;
@@ -71,7 +72,7 @@ public class CommonProxy implements Proxy
             final String message = "msg.craft.setcorner";
             if (!worldIn.isRemote) playerIn.sendMessage(new TranslationTextComponent(message, pos));
             evt.setCanceled(true);
-            itemstack.getTag().putLong("time", worldIn.getGameTime());
+            itemstack.getTag().putLong("time", worldIn.getDayTime());
         }
     }
 
@@ -79,12 +80,12 @@ public class CommonProxy implements Proxy
     public void interactRightClickBlock(final PlayerInteractEvent.RightClickItem evt)
     {
         if (evt.getHand() == Hand.OFF_HAND || evt.getWorld().isRemote || evt.getItemStack().isEmpty() || !evt
-                .getPlayer().isShiftKeyDown() || evt.getItemStack().getItem() != ThutCrafts.CRAFTMAKER) return;
+                .getPlayer().isSneaking() || evt.getItemStack().getItem() != ThutCrafts.CRAFTMAKER) return;
         final ItemStack itemstack = evt.getItemStack();
         final PlayerEntity playerIn = evt.getPlayer();
         final World worldIn = evt.getWorld();
-        if (itemstack.hasTag() && playerIn.isShiftKeyDown() && itemstack.getTag().contains("min") && itemstack.getTag()
-                .getLong("time") != worldIn.getGameTime())
+        if (itemstack.hasTag() && playerIn.isSneaking() && itemstack.getTag().contains("min") && itemstack.getTag()
+                .getLong("time") != worldIn.getDayTime())
         {
             final CompoundNBT minTag = itemstack.getTag().getCompound("min");
             final Vec3d loc = playerIn.getPositionVector().add(0, playerIn.getEyeHeight(), 0).add(playerIn.getLookVec()

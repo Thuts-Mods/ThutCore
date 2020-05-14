@@ -1,16 +1,17 @@
-package thut.core.client.render.particle;
+package thut.api.particle;
 
 import java.util.List;
 
+import org.lwjgl.opengl.GL11;
+
 import com.google.common.collect.Lists;
-import com.mojang.blaze3d.matrix.MatrixStack;
 
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.settings.ParticleStatus;
 import net.minecraft.entity.player.PlayerEntity;
 import net.minecraftforge.api.distmarker.Dist;
 import net.minecraftforge.api.distmarker.OnlyIn;
-import net.minecraftforge.client.event.RenderWorldLastEvent;
+import net.minecraftforge.client.event.EntityViewRenderEvent.RenderFogEvent;
 import net.minecraftforge.event.world.WorldEvent.Unload;
 import net.minecraftforge.eventbus.api.SubscribeEvent;
 import thut.api.maths.Vector3;
@@ -53,14 +54,13 @@ public class ParticleHandler
 
     @OnlyIn(Dist.CLIENT)
     @SubscribeEvent
-    public static void onRenderWorldPost(final RenderWorldLastEvent event)
+    public static void onRenderWorldPost(final RenderFogEvent event)
     {
         try
         {
             synchronized (ParticleHandler.particles)
             {
-                final MatrixStack mat = event.getMatrixStack();
-                mat.push();
+                GL11.glPushMatrix();
                 final List<ParticlePacket> list = Lists.newArrayList();
                 for (int i = 0; i < ParticleHandler.particles.size(); i++)
                 {
@@ -76,16 +76,16 @@ public class ParticleHandler
                     final PlayerEntity player = Minecraft.getInstance().player;
                     final Vector3 source = Vector3.getNewVector().set(player.lastTickPosX, player.lastTickPosY,
                             player.lastTickPosZ);
-                    mat.push();
+                    GL11.glPushMatrix();
                     source.set(target.subtract(source));
-                    mat.translate(source.x, source.y, source.z);
-                    final double d0 = (-player.posX + player.lastTickPosX) * event.getPartialTicks();
-                    final double d1 = (-player.posY + player.lastTickPosY) * event.getPartialTicks();
-                    final double d2 = (-player.posZ + player.lastTickPosZ) * event.getPartialTicks();
+                    GL11.glTranslated(source.x, source.y, source.z);
+                    final double d0 = (-player.posX + player.lastTickPosX) * event.getRenderPartialTicks();
+                    final double d1 = (-player.posY + player.lastTickPosY) * event.getRenderPartialTicks();
+                    final double d2 = (-player.posZ + player.lastTickPosZ) * event.getRenderPartialTicks();
                     source.set(d0, d1, d2);
-                    mat.translate(source.x, source.y, source.z);
+                    GL11.glTranslated(source.x, source.y, source.z);
                     // particle.render(event.getRenderPartialTicks());
-                    mat.pop();
+                    GL11.glPopMatrix();
                     if (particle.lastTick() != player.getEntityWorld().getGameTime())
                     {
                         particle.setDuration(particle.getDuration() - 1);
@@ -97,7 +97,7 @@ public class ParticleHandler
                         list.add(packet);
                     }
                 }
-                mat.pop();
+                GL11.glPopMatrix();
                 for (int i = 0; i < list.size(); i++)
                     ParticleHandler.particles.remove(list.get(i));
             }

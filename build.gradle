@@ -96,13 +96,20 @@ task sourcesJar(type: Jar) {
 }
 
 task deobfJar(type: Jar) {	
+    classifier = 'deobf'
     from sourceSets.main.output	
-    classifier = 'deobf'	
+}
+
+task serverJar(type: Jar) {	
+    classifier = 'server'
+    from sourceSets.main.output	
+    exclude '**/assets/*'
 }
 
 artifacts {
 	archives sourcesJar
     archives deobfJar
+    reobf { serverJar {}}
 }
 
 def cleanTOML()
