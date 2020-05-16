@@ -1,16 +1,11 @@
 package thut.api.particle;
 
-import org.lwjgl.opengl.GL11;
-
+import com.mojang.blaze3d.vertex.IVertexBuilder;
 import com.mojang.brigadier.StringReader;
 import com.mojang.brigadier.exceptions.CommandSyntaxException;
 
-import net.minecraft.client.Minecraft;
 import net.minecraft.client.renderer.ActiveRenderInfo;
-import net.minecraft.client.renderer.BufferBuilder;
-import net.minecraft.client.renderer.Tessellator;
-import net.minecraft.client.renderer.entity.EntityRendererManager;
-import net.minecraft.client.renderer.vertex.DefaultVertexFormats;
+import net.minecraft.client.renderer.Quaternion;
 import net.minecraft.item.DyeColor;
 import net.minecraft.network.PacketBuffer;
 import net.minecraft.particles.IParticleData;
@@ -20,6 +15,7 @@ import net.minecraftforge.api.distmarker.Dist;
 import net.minecraftforge.api.distmarker.OnlyIn;
 import net.minecraftforge.registries.ForgeRegistries;
 import thut.api.maths.Vector3;
+import thut.api.maths.vecmath.Vector3f;
 import thut.core.common.ThutCore;
 
 public class ParticleBase extends ParticleType<ParticleBase> implements IParticle, IAnimatedParticle, IParticleData
@@ -122,47 +118,56 @@ public class ParticleBase extends ParticleType<ParticleBase> implements IParticl
         return this;
     }
 
-    @Override
-    @OnlyIn(value = Dist.CLIENT)
-    public void renderParticle(final BufferBuilder buffer, final ActiveRenderInfo entityIn, final float partialTicks,
-            final float rotationX, final float rotationZ, final float rotationYZ, final float rotationXY,
-            final float rotationXZ)
+    protected void render(final IVertexBuilder buffer, final Quaternion quaternion, final Vector3f offset)
     {
-        GL11.glPushMatrix();
+        final net.minecraft.client.renderer.Vector3f vector3f1 = new Vector3f(-1.0F, -1.0F, 0.0F).toMC();
+        vector3f1.transform(quaternion);
+        final net.minecraft.client.renderer.Vector3f[] verts = new net.minecraft.client.renderer.Vector3f[] {
+                new net.minecraft.client.renderer.Vector3f(-1.0F, -1.0F, 0.0F),
+                new net.minecraft.client.renderer.Vector3f(-1.0F, 1.0F, 0.0F),
+                new net.minecraft.client.renderer.Vector3f(1.0F, 1.0F, 0.0F),
+                new net.minecraft.client.renderer.Vector3f(1.0F, -1.0F, 0.0F) };
+        final float f4 = this.size;
 
-        if (this.billboard)
+        for (int i = 0; i < 4; ++i)
         {
-            final EntityRendererManager renderManager = Minecraft.getInstance().getRenderManager();
-            GL11.glRotatef(-renderManager.playerViewY, 0.0F, 1.0F, 0.0F);
-            GL11.glRotatef(renderManager.playerViewX, 1.0F, 0.0F, 0.0F);
+            final net.minecraft.client.renderer.Vector3f vector3f = verts[i];
+            vector3f.transform(quaternion);
+            vector3f.mul(f4);
+            vector3f.add(offset.x, offset.y, offset.z);
         }
         this.setColour();
 
-        final float alpha = (this.rgba >> 24 & 255) / 255f;
-        final float red = (this.rgba >> 16 & 255) / 255f;
-        final float green = (this.rgba >> 8 & 255) / 255f;
-        final float blue = (this.rgba & 255) / 255f;
+        final float a = (this.rgba >> 24 & 255) / 255f;
+        final float r = (this.rgba >> 16 & 255) / 255f;
+        final float g = (this.rgba >> 8 & 255) / 255f;
+        final float b = (this.rgba & 255) / 255f;
+        // DOLATER add a configuration for the particle lightmap
+        final int j = 15 << 20 | 15 << 4;
 
         final int num = this.getDuration() / this.animSpeed % this.tex.length;
         final int u = this.tex[num][0], v = this.tex[num][1];
-        final double u1 = u * 1d / 16d, v1 = v * 1d / 16d;
-        final double u2 = (u + 1) * 1d / 16d, v2 = (v + 1) * 1d / 16d;
-        Minecraft.getInstance().getTextureManager().bindTexture(ParticleBase.TEXTUREMAP);
-        final double x0 = -this.size, y0 = -this.size, z0 = 0;
-        final double x1 = 0, y1 = this.size;
-        buffer.begin(GL11.GL_QUADS, DefaultVertexFormats.POSITION_TEX_COLOR);
-        // Face 1
-        buffer.pos(x0, y0, z0).tex(u1, v2).color(red, green, blue, alpha).endVertex();
-        buffer.pos(x1, y0, z0).tex(u2, v2).color(red, green, blue, alpha).endVertex();
-        buffer.pos(x1, y1, z0).tex(u2, v1).color(red, green, blue, alpha).endVertex();
-        buffer.pos(x0, y1, z0).tex(u1, v1).color(red, green, blue, alpha).endVertex();
-        // Face 2
-        buffer.pos(x0, y0, z0).tex(u1, v2).color(red, green, blue, alpha).endVertex();
-        buffer.pos(x0, y1, z0).tex(u1, v1).color(red, green, blue, alpha).endVertex();
-        buffer.pos(x1, y1, z0).tex(u2, v1).color(red, green, blue, alpha).endVertex();
-        buffer.pos(x1, y0, z0).tex(u2, v2).color(red, green, blue, alpha).endVertex();
-        Tessellator.getInstance().draw();
-        GL11.glPopMatrix();
+        float u1 = u * 1f / 16f, v1 = v * 1f / 16f;
+        float u2 = (u + 1) * 1f / 16f, v2 = (v + 1) * 1f / 16f;
+
+        buffer.pos(verts[0].getX(), verts[0].getY(), verts[0].getZ()).color(r, g, b, a).tex(u1, v2).lightmap(j)
+                .endVertex();
+        buffer.pos(verts[1].getX(), verts[1].getY(), verts[1].getZ()).color(r, g, b, a).tex(u2, v2).lightmap(j)
+                .endVertex();
+        buffer.pos(verts[2].getX(), verts[2].getY(), verts[2].getZ()).color(r, g, b, a).tex(u2, v1).lightmap(j)
+                .endVertex();
+        buffer.pos(verts[3].getX(), verts[3].getY(), verts[3].getZ()).color(r, g, b, a).tex(u1, v1).lightmap(j)
+                .endVertex();
+    }
+
+    @Override
+    @OnlyIn(value = Dist.CLIENT)
+    public void renderParticle(final IVertexBuilder buffer, final ActiveRenderInfo renderInfo, final float partialTicks,
+            final Vector3f offset)
+    {
+        Quaternion quaternion;
+        quaternion = renderInfo.getRotation();
+        this.render(buffer, quaternion, offset);
     }
 
     @Override
