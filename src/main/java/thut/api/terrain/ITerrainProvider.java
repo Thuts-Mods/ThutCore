@@ -1,10 +1,8 @@
 package thut.api.terrain;
 
-import java.util.Collections;
 import java.util.Map;
 
-import com.google.common.collect.Maps;
-
+import it.unimi.dsi.fastutil.objects.Object2ObjectOpenHashMap;
 import net.minecraft.util.math.BlockPos;
 import net.minecraft.util.math.ChunkPos;
 import net.minecraft.world.IWorld;
@@ -15,19 +13,56 @@ import thut.api.ThutCaps;
 
 public interface ITerrainProvider
 {
+    Object lock = new Object();
+
+    static class TerrainCache
+    {
+        TerrainSegment[] segs = new TerrainSegment[16];
+        int              num  = 16;
+
+        public TerrainCache(final ChunkPos temp, final IChunk chunk)
+        {
+            for (int i = 0; i < 16; i++)
+            {
+                this.segs[i] = new TerrainSegment(temp.x, i, temp.z);
+                this.segs[i].chunk = chunk;
+                this.segs[i].real = false;
+            }
+        }
+
+        public TerrainSegment remove(final int y)
+        {
+            final TerrainSegment seg = this.segs[y];
+            if (seg == null) return null;
+            this.num--;
+            return seg;
+        }
+
+        public boolean isValid()
+        {
+            return this.num > 0;
+        }
+
+        public TerrainSegment get(final int y)
+        {
+            return this.segs[y];
+        }
+    }
+
     /**
      * This is a cache of pending terrain segments, it is used as sometimes
      * segments need to have things set for them which the chunk is still being
      * generated, ie not completely loaded.
      */
-    public static Map<DimensionType, Map<BlockPos, TerrainSegment>> pendingCache = Maps.newConcurrentMap();
+    public static Map<GlobalChunkPos, TerrainCache> pendingCache = new Object2ObjectOpenHashMap<>();
+
     /**
      * This is a cache of loaded chunks, it is used to prevent thread lock
      * contention when trying to look up a chunk, as it seems that
      * world.chunkExists returning true does not mean that you can just go and
      * ask for the chunk...
      */
-    public static Map<DimensionType, Map<ChunkPos, IChunk>>         loadedChunks = Maps.newConcurrentMap();
+    public static Map<GlobalChunkPos, IChunk> loadedChunks = new Object2ObjectOpenHashMap<>();
 
     /**
      * Inserts the chunk into the cache of chunks.
@@ -37,9 +72,11 @@ public interface ITerrainProvider
      */
     public static void addChunk(final DimensionType dim, final IChunk chunk)
     {
-        final Map<ChunkPos, IChunk> dimMap = ITerrainProvider.loadedChunks.getOrDefault(dim, Maps.newConcurrentMap());
-        dimMap.put(chunk.getPos(), chunk);
-        if (!ITerrainProvider.loadedChunks.containsKey(dim)) ITerrainProvider.loadedChunks.put(dim, dimMap);
+        final GlobalChunkPos pos = new GlobalChunkPos(dim, chunk.getPos());
+        synchronized (ITerrainProvider.lock)
+        {
+            ITerrainProvider.loadedChunks.put(pos, chunk);
+        }
     }
 
     /**
@@ -48,19 +85,29 @@ public interface ITerrainProvider
      * @param dim
      * @param pos
      */
-    public static void removeChunk(final DimensionType dim, final ChunkPos pos)
+    public static void removeChunk(final DimensionType dim, final ChunkPos cpos)
     {
-        ITerrainProvider.loadedChunks.getOrDefault(dim, Collections.emptyMap()).remove(pos);
+        final GlobalChunkPos pos = new GlobalChunkPos(dim, cpos);
+        synchronized (ITerrainProvider.lock)
+        {
+            ITerrainProvider.loadedChunks.remove(pos);
+        }
     }
 
-    public static IChunk getChunk(final DimensionType dim, final ChunkPos pos)
+    public static IChunk getChunk(final DimensionType dim, final ChunkPos cpos)
     {
-        return ITerrainProvider.loadedChunks.getOrDefault(dim, Collections.emptyMap()).get(pos);
+        final GlobalChunkPos pos = new GlobalChunkPos(dim, cpos);
+        return ITerrainProvider.loadedChunks.get(pos);
     }
 
     public static TerrainSegment removeCached(final DimensionType dim, final BlockPos pos)
     {
-        return ITerrainProvider.pendingCache.getOrDefault(dim, Collections.emptyMap()).remove(pos);
+        final GlobalChunkPos wpos = new GlobalChunkPos(dim, new ChunkPos(pos.getX(), pos.getZ()));
+        final TerrainCache segs = ITerrainProvider.pendingCache.get(wpos);
+        if (segs == null) return null;
+        final TerrainSegment var = segs.remove(pos.getY());
+        if (!segs.isValid()) ITerrainProvider.pendingCache.remove(wpos);
+        return var;
     }
 
     /**
@@ -74,31 +121,26 @@ public interface ITerrainProvider
     {
         // Convert the pos to a chunk pos
         final ChunkPos temp = new ChunkPos(p);
+        int y = p.getY() >> 4;
+        if (y < 0) y = 0;
+        if (y > 15) y = 15;
         // Include the value for y
-        final BlockPos pos = new BlockPos(temp.x, p.getY() / 16, temp.z);
+        final BlockPos pos = new BlockPos(temp.x, y, temp.z);
         final DimensionType dim = world.getDimension().getType();
         final IChunk chunk = ITerrainProvider.getChunk(dim, temp);
         final boolean real = chunk != null && chunk instanceof ICapabilityProvider;
         // This means it occurs during worldgen?
         if (!real)
         {
-            final Map<BlockPos, TerrainSegment> dimMap = ITerrainProvider.pendingCache.getOrDefault(dim, Maps
-                    .newConcurrentMap());
-            /**
-             * Here we need to make a new terrain segment, and cache it, then
-             * later if the world is actually available, we can get the terrain
-             * segment. from that.
-             */
-            if (dimMap.containsKey(pos)) return dimMap.get(pos);
-            // No real world, so lets deal with the cache.
-            final TerrainSegment segment = new TerrainSegment(pos);
-            segment.chunk = chunk;
-            segment.real = false;
-            dimMap.put(pos, segment);
-            if (!ITerrainProvider.pendingCache.containsKey(dim)) ITerrainProvider.pendingCache.put(dim, dimMap);
-            return segment;
+            final GlobalChunkPos wpos = new GlobalChunkPos(dim, temp);
+            TerrainCache segs = ITerrainProvider.pendingCache.get(wpos);
+            if (segs == null)
+            {
+                segs = new TerrainCache(temp, chunk);
+                ITerrainProvider.pendingCache.put(wpos, segs);
+            }
+            return segs.get(y);
         }
-
         final CapabilityTerrain.ITerrainProvider provider = ((ICapabilityProvider) chunk).getCapability(
                 ThutCaps.TERRAIN_CAP).orElse(null);
         provider.setChunk(chunk);

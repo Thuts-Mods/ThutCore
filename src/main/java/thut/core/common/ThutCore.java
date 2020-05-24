@@ -45,6 +45,7 @@ import net.minecraftforge.fml.javafmlmod.FMLJavaModLoadingContext;
 import net.minecraftforge.fml.loading.FMLPaths;
 import thut.api.LinkableCaps;
 import thut.api.OwnableCaps;
+import thut.api.entity.BreedableCaps;
 import thut.api.entity.IMobColourable;
 import thut.api.entity.IMobTexturable;
 import thut.api.entity.IMultiplePassengerEntity;
@@ -55,7 +56,6 @@ import thut.api.entity.blockentity.IBlockEntity;
 import thut.api.entity.genetics.IMobGenetics;
 import thut.api.particle.ThutParticles;
 import thut.api.terrain.CapabilityTerrain;
-import thut.api.terrain.ITerrainProvider;
 import thut.api.terrain.StructureManager;
 import thut.api.world.mobs.data.DataSync;
 import thut.core.common.config.Config;
@@ -242,7 +242,6 @@ public class ThutCore
     {
         // do something when the server starts
         ThutCore.LOGGER.debug("Clearing terrain cache");
-        ITerrainProvider.pendingCache.clear();
         StructureManager.clear();
     }
 
@@ -280,6 +279,7 @@ public class ThutCore
         OwnableCaps.setup();
         LinkableCaps.setup();
         ShearableCaps.setup();
+        BreedableCaps.setup();
 
         // Register terrain capabilies
         CapabilityManager.INSTANCE.register(CapabilityTerrain.ITerrainProvider.class, new CapabilityTerrain.Storage(),

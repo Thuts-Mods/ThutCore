@@ -14,7 +14,6 @@ import net.minecraftforge.event.world.WorldEvent;
 import net.minecraftforge.eventbus.api.SubscribeEvent;
 import thut.api.maths.Vector3;
 import thut.api.terrain.CapabilityTerrain.DefaultProvider;
-import thut.core.common.ThutCore;
 
 public class TerrainManager
 {
@@ -82,6 +81,8 @@ public class TerrainManager
         DimensionType dim = null;
         if (evt.getWorld() != null && evt.getWorld().getDimension() != null) dim = evt.getWorld().getDimension()
                 .getType();
+        // This is null when this is loaded off-thread, IE before the chunk is
+        // finished
         if (dim != null) ITerrainProvider.addChunk(dim, evt.getChunk());
     }
 
@@ -97,12 +98,7 @@ public class TerrainManager
     @SubscribeEvent
     public static void onWorldUnload(final WorldEvent.Unload evt)
     {
-        DimensionType dim = null;
-        if (evt.getWorld() != null && evt.getWorld().getDimension() != null) dim = evt.getWorld().getDimension()
-                .getType();
-        ThutCore.LOGGER.debug("Clearing cache for " + dim);
-        ITerrainProvider.loadedChunks.remove(dim);
-        ITerrainProvider.pendingCache.remove(dim);
+
     }
 
     @SubscribeEvent

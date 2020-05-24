@@ -132,8 +132,8 @@ public class OwnableCaps
         public LivingEntity getOwner()
         {
             if (this.getOwnerId() == null) this.owner = null;
-            if (this.getOwnerId() != null && this.owner == null) this.owner = this.wrapped.getOwner();
-            if (this.getOwnerId() != null && this.owner == null && this.wrapped.getEntityWorld() instanceof ServerWorld)
+            if (this.getOwnerId() != null) this.owner = this.wrapped.getOwner();
+            if (this.getOwnerId() != null && this.wrapped.getEntityWorld() instanceof ServerWorld)
                 return this.owner = this.getOwner((ServerWorld) this.wrapped.getEntityWorld(), this.owner);
             return this.owner;
         }
@@ -276,23 +276,25 @@ public class OwnableCaps
     @SubscribeEvent(priority = EventPriority.LOWEST)
     public static void attachMobs(final AttachCapabilitiesEvent<Entity> event)
     {
+        // Check if someone else adds this first (like say an IPokemob
+        for (final ICapabilityProvider p : event.getCapabilities().values())
+            if (p.getCapability(ThutCaps.OWNABLE_CAP).isPresent()) return;
         // We check if it is already here, incase someone else wants to wrap a
         // tameable differently.
-        if (!event.getCapabilities().containsKey(OwnableCaps.LOCWRAP))
-        {
-            if (event.getObject() instanceof TameableEntity) event.addCapability(OwnableCaps.LOCWRAP, new TameWrapper(
-                    (TameableEntity) event.getObject()));
-            else if (event.getObject() instanceof AbstractHorseEntity) event.addCapability(OwnableCaps.LOCWRAP,
-                    new HorseWrapper((AbstractHorseEntity) event.getObject()));
-
-        }
+        if (event.getObject() instanceof TameableEntity) event.addCapability(OwnableCaps.LOCWRAP, new TameWrapper(
+                (TameableEntity) event.getObject()));
+        else if (event.getObject() instanceof AbstractHorseEntity) event.addCapability(OwnableCaps.LOCWRAP,
+                new HorseWrapper((AbstractHorseEntity) event.getObject()));
         else if (OwnableCaps.MOBS.contains(event.getObject().getClass())) event.addCapability(OwnableCaps.LOCBASE,
                 new Impl());
     }
 
-    @SubscribeEvent
+    @SubscribeEvent(priority = EventPriority.LOWEST)
     public static void attachTEs(final AttachCapabilitiesEvent<TileEntity> event)
     {
+        // Check if someone else adds this first (like say an IPokemob
+        for (final ICapabilityProvider p : event.getCapabilities().values())
+            if (p.getCapability(ThutCaps.OWNABLE_CAP).isPresent()) return;
         if (OwnableCaps.TILES.contains(event.getObject().getClass())) event.addCapability(OwnableCaps.LOCBASE,
                 new ImplTE());
     }
