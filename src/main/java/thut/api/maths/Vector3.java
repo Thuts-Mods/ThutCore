@@ -5,7 +5,10 @@ import java.util.Collection;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Optional;
+import java.util.UUID;
 import java.util.function.Predicate;
+
+import com.mojang.authlib.GameProfile;
 
 import io.netty.buffer.ByteBuf;
 import net.minecraft.block.Block;
@@ -23,9 +26,13 @@ import net.minecraft.util.Direction;
 import net.minecraft.util.EntityPredicates;
 import net.minecraft.util.math.AxisAlignedBB;
 import net.minecraft.util.math.BlockPos;
+import net.minecraft.util.math.BlockRayTraceResult;
 import net.minecraft.util.math.MathHelper;
-import net.minecraft.util.math.Vec3d;
+import net.minecraft.util.math.RayTraceContext;
+import net.minecraft.util.math.RayTraceContext.BlockMode;
+import net.minecraft.util.math.RayTraceContext.FluidMode;
 import net.minecraft.util.math.shapes.VoxelShape;
+import net.minecraft.util.math.vector.Vector3d;
 import net.minecraft.world.Explosion;
 import net.minecraft.world.IBlockReader;
 import net.minecraft.world.IWorld;
@@ -36,6 +43,9 @@ import net.minecraft.world.biome.BiomeContainer;
 import net.minecraft.world.chunk.Chunk;
 import net.minecraft.world.chunk.IChunk;
 import net.minecraft.world.gen.Heightmap.Type;
+import net.minecraft.world.server.ServerWorld;
+import net.minecraftforge.common.util.FakePlayer;
+import net.minecraftforge.common.util.FakePlayerFactory;
 import thut.api.entity.ICompoundMob;
 import thut.api.entity.ICompoundMob.ICompoundPart;
 
@@ -122,9 +132,14 @@ public class Vector3
 
     static Vector3              move2         = Vector3.getNewVector();
 
+    private static FakePlayer USEDFORRAYTRACECONTEXT = null;
+
+    private static final UUID        PLAYERID   = new UUID(1234567, 7324156);
+    private static final GameProfile FAKEPLAYER = new GameProfile(Vector3.PLAYERID, "raytrace-context");
+
     public static Vector3 entity(final Entity e)
     {
-        if (e != null) return Vector3.getNewVector().set(e.posX, e.posY + e.getEyeHeight(), e.posZ);
+        if (e != null) return Vector3.getNewVector().set(e.getPosX(), e.getPosY() + e.getEyeHeight(), e.getPosZ());
         return null;
     }
 
@@ -268,7 +283,19 @@ public class Vector3
     {
         direction = direction.normalize();
 
-        // TODO see if there is any vanilla raytrace that works nicely hwere.
+        if (world instanceof ServerWorld)
+        {
+            final Vector3d start = source.toVec3d();
+            final Vector3d end = direction.scalarMultBy(range).addTo(source).toVec3d();
+            if (Vector3.USEDFORRAYTRACECONTEXT == null) Vector3.USEDFORRAYTRACECONTEXT = FakePlayerFactory.get(
+                    (ServerWorld) world, Vector3.FAKEPLAYER);
+            else Vector3.USEDFORRAYTRACECONTEXT.setWorld((World) world);
+            final RayTraceContext context = new RayTraceContext(start, end, BlockMode.COLLIDER, FluidMode.NONE,
+                    Vector3.USEDFORRAYTRACECONTEXT);
+            final BlockRayTraceResult result = world.rayTraceBlocks(context);
+            return result.getType() == BlockRayTraceResult.Type.MISS;
+        }
+
         double dx, dy, dz;
         for (double i = 0; i < range; i += 0.0625)
         {
@@ -280,88 +307,6 @@ public class Vector3
 
             final boolean check = Vector3.isPointClearBlocks(xtest, ytest, ztest, world);
             if (!check) return false;
-        }
-        return true;
-    }
-
-    public static boolean movePointOutOfBlocks(final Vector3 v, final World world)
-    {
-        final Vector3 v1 = Vector3.move1.set(v);
-        final Vector3 v2 = Vector3.move2.set(v);
-
-        final long start = System.nanoTime();
-
-        if (!v.isClearOfBlocks(world))
-        {
-            int n = 0;
-
-            clear:
-            while (!v.isClearOfBlocks(world))
-            {
-                for (final Direction side : Direction.values())
-                {
-                    v2.set(v);
-                    if (v.offsetBy(side).isClearOfBlocks(world)) break clear;
-                    v.set(v2);
-                }
-                boolean step = true;
-                if (n < 2) v.offset(Direction.UP);
-                else if (n < 4)
-                {
-                    if (step)
-                    {
-                        step = false;
-                        v.set(v1);
-                    }
-                    v.offsetBy(Direction.NORTH);
-                }
-                else if (n < 6)
-                {
-                    if (!step)
-                    {
-                        step = true;
-                        v.set(v1);
-                    }
-                    v.offsetBy(Direction.SOUTH);
-                }
-                else if (n < 8)
-                {
-                    if (step)
-                    {
-                        step = false;
-                        v.set(v1);
-                    }
-                    v.offsetBy(Direction.EAST);
-                }
-                else if (n < 10)
-                {
-                    if (!step)
-                    {
-                        step = true;
-                        v.set(v1);
-                    }
-                    v.offsetBy(Direction.WEST);
-                }
-                else if (n < 12)
-                {
-                    if (step)
-                    {
-                        step = false;
-                        v.set(v1);
-                    }
-                    v.offsetBy(Direction.DOWN);
-                }
-                n++;
-                if (n >= 12) break;
-            }
-
-            final long end = System.nanoTime() - start;
-
-            final double time = end / 1000000000D;
-            if (time > 0.001) System.out.println("Took " + time + "s to check");
-
-            if (v.isClearOfBlocks(world)) return true;
-            return false;
         }
         return true;
     }
@@ -442,15 +387,15 @@ public class Vector3
     {
         if (e != null && bool)
         {
-            this.x = e.posX;
-            this.y = e.posY + e.getHeight() / 2;
-            this.z = e.posZ;
+            this.x = e.getPosX();
+            this.y = e.getPosY() + e.getHeight() / 2;
+            this.z = e.getPosZ();
         }
         else if (e != null)
         {
-            this.x = e.posX;
-            this.y = e.posY + e.getEyeHeight();
-            this.z = e.posZ;
+            this.x = e.getPosX();
+            this.y = e.getPosY() + e.getEyeHeight();
+            this.z = e.getPosZ();
         }
     }
 
@@ -469,7 +414,7 @@ public class Vector3
         this.set(B.subtract(A));
     }
 
-    private Vector3(final Vec3d vec)
+    private Vector3(final Vector3d vec)
     {
         this.x = vec.x;
         this.y = vec.y;
@@ -536,9 +481,9 @@ public class Vector3
         Predicate<Entity> predicate = e -> e != excluded;
         predicate = predicate.and(EntityPredicates.NOT_SPECTATING);
         final double ds = range;
-        final Vec3d vec3 = source.toVec3d();
-        final Vec3d vec31 = direction.toVec3d();
-        final Vec3d vec32 = vec3.add(vec31.x * ds, vec31.y * ds, vec31.z * ds);
+        final Vector3d vec3 = source.toVec3d();
+        final Vector3d vec31 = direction.toVec3d();
+        final Vector3d vec32 = vec3.add(vec31.x * ds, vec31.y * ds, vec31.z * ds);
         final float f = 0.5F;
         final AxisAlignedBB aabb = this.getAABB().expand(vec31.x * ds, vec31.y * ds, vec31.z * ds).grow(f, f, f);
         final List<Entity> mobs = world.getEntitiesInAABBexcluding(excluded, aabb, predicate);
@@ -548,7 +493,7 @@ public class Vector3
             for (final ICompoundPart part : parts)
             {
                 final AxisAlignedBB axisalignedbb = part.getMob().getBoundingBox().grow(0.3F);
-                final Optional<Vec3d> optional = axisalignedbb.rayTrace(vec3, vec32);
+                final Optional<Vector3d> optional = axisalignedbb.rayTrace(vec3, vec32);
                 if (optional.isPresent())
                 {
                     ret.add(entity1);
@@ -558,7 +503,7 @@ public class Vector3
             else
             {
                 final AxisAlignedBB axisalignedbb = entity1.getBoundingBox().grow(0.3F);
-                final Optional<Vec3d> optional = axisalignedbb.rayTrace(vec3, vec32);
+                final Optional<Vector3d> optional = axisalignedbb.rayTrace(vec3, vec32);
                 if (optional.isPresent()) ret.add(entity1);
             }
         return ret;
@@ -571,9 +516,9 @@ public class Vector3
         final List<Entity> ret = new ArrayList<>();
         if (predicate == null) predicate = EntityPredicates.NOT_SPECTATING;
         final double ds = range;
-        final Vec3d vec3 = source.toVec3d();
-        final Vec3d vec31 = direction.toVec3d();
-        final Vec3d vec32 = vec3.add(vec31.x * ds, vec31.y * ds, vec31.z * ds);
+        final Vector3d vec3 = source.toVec3d();
+        final Vector3d vec31 = direction.toVec3d();
+        final Vector3d vec32 = vec3.add(vec31.x * ds, vec31.y * ds, vec31.z * ds);
         final float f = 1F;
         final AxisAlignedBB aabb = this.getAABB().expand(vec31.x * ds, vec31.y * ds, vec31.z * ds).grow(f, f, f);
         final List<Entity> mobs = world.getEntitiesInAABBexcluding(excluded, aabb, predicate);
@@ -583,7 +528,7 @@ public class Vector3
             for (final ICompoundPart part : parts)
             {
                 final AxisAlignedBB axisalignedbb = part.getMob().getBoundingBox().grow(size);
-                final Optional<Vec3d> optional = axisalignedbb.rayTrace(vec3, vec32);
+                final Optional<Vector3d> optional = axisalignedbb.rayTrace(vec3, vec32);
                 if (optional.isPresent())
                 {
                     ret.add(entity1);
@@ -593,7 +538,7 @@ public class Vector3
             else
             {
                 final AxisAlignedBB axisalignedbb = entity1.getBoundingBox().grow(size);
-                final Optional<Vec3d> optional = axisalignedbb.rayTrace(vec3, vec32);
+                final Optional<Vector3d> optional = axisalignedbb.rayTrace(vec3, vec32);
                 if (optional.isPresent()) ret.add(entity1);
             }
         return ret;
@@ -833,14 +778,14 @@ public class Vector3
         return Vector3.findNextSolidBlock(world, this, direction, range);
     }
 
-    public Entity firstEntityExcluding(final double range, final Vec3d vec31, final World world, final Entity entity,
+    public Entity firstEntityExcluding(final double range, final Vector3d vec31, final World world, final Entity entity,
             Predicate<Entity> predicate)
     {
         Entity pointedEntity = null;
         if (predicate == null) predicate = EntityPredicates.NOT_SPECTATING;
         double ds = range;
-        final Vec3d vec3 = this.toVec3d();
-        final Vec3d vec32 = vec3.add(vec31.x * ds, vec31.y * ds, vec31.z * ds);
+        final Vector3d vec3 = this.toVec3d();
+        final Vector3d vec32 = vec3.add(vec31.x * ds, vec31.y * ds, vec31.z * ds);
         final float f = 2.5F;
         final AxisAlignedBB aabb = this.getAABB().expand(vec31.x * ds, vec31.y * ds, vec31.z * ds).grow(f, f, f);
         final List<Entity> mobs = world.getEntitiesInAABBexcluding(entity, aabb, predicate);
@@ -851,7 +796,7 @@ public class Vector3
             for (final ICompoundPart part : parts)
             {
                 final AxisAlignedBB axisalignedbb = part.getMob().getBoundingBox().grow(0.3F);
-                final Optional<Vec3d> optional = axisalignedbb.rayTrace(vec3, vec32);
+                final Optional<Vector3d> optional = axisalignedbb.rayTrace(vec3, vec32);
                 if (optional.isPresent())
                 {
                     final double d1 = vec3.squareDistanceTo(optional.get());
@@ -866,7 +811,7 @@ public class Vector3
             else
             {
                 final AxisAlignedBB axisalignedbb = entity1.getBoundingBox().grow(0.3F);
-                final Optional<Vec3d> optional = axisalignedbb.rayTrace(vec3, vec32);
+                final Optional<Vector3d> optional = axisalignedbb.rayTrace(vec3, vec32);
                 if (optional.isPresent())
                 {
                     final double d1 = vec3.squareDistanceTo(optional.get());
@@ -880,9 +825,9 @@ public class Vector3
         return pointedEntity;
     }
 
-    public Vec3d toVec3d()
+    public Vector3d toVec3d()
     {
-        return new Vec3d(this.x, this.y, this.z);
+        return new Vector3d(this.x, this.y, this.z);
     }
 
     public List<Entity> firstEntityLocationExcluding(final int range, final double size, Vector3 direction,
@@ -966,7 +911,8 @@ public class Vector3
     {
         final BlockState state = this.getBlockState(world);
         if (state == null || state.getBlock().isAir(state, world, this.getPos())) return 0;
-        return state.getExplosionResistance(world, this.pos, boom.getExplosivePlacedBy(), boom);
+        final float res = state.getExplosionResistance(world, this.pos, boom);
+        return res;
     }
 
     public int getLightValue(final World world)
@@ -1200,12 +1146,6 @@ public class Vector3
         return true;
     }
 
-    public boolean isSideSolid(final IBlockReader world, final Direction side)
-    {
-        final BlockState state = this.getBlockState(world);
-        return state.canBeConnectedTo(world, this.getPos(), side);
-    }
-
     public boolean isVisible(final IBlockReader world, final Vector3 location)
     {
         final Vector3 direction = location.subtract(this);
@@ -1251,10 +1191,7 @@ public class Vector3
      * @return */
     public double magSq()
     {
-        double vmag = 0;
-        for (int i = 0; i < Vector3.length; i = i + 1)
-            vmag = vmag + this.get(i) * this.get(i);
-        return vmag;
+        return this.x * this.x + this.y * this.y + this.z * this.z;
     }
 
     /** Left multiplies the Matrix by the Vector
@@ -1430,15 +1367,15 @@ public class Vector3
     {
         if (e != null && b)
         {
-            this.x = e.posX;
-            this.y = e.posY + e.getHeight() / 2;
-            this.z = e.posZ;
+            this.x = e.getPosX();
+            this.y = e.getPosY() + e.getHeight() / 2;
+            this.z = e.getPosZ();
         }
         else if (e != null)
         {
-            this.x = e.posX;
-            this.y = e.posY + e.getEyeHeight();
-            this.z = e.posZ;
+            this.x = e.getPosX();
+            this.y = e.getPosY() + e.getEyeHeight();
+            this.z = e.getPosZ();
         }
         return this;
     }
@@ -1455,7 +1392,7 @@ public class Vector3
         if (o instanceof Entity)
         {
             final Entity e = (Entity) o;
-            this.set(e.posX, e.posY, e.posZ);
+            this.set(e.getPosX(), e.getPosY(), e.getPosZ());
         }
         else if (o instanceof TileEntity)
         {
@@ -1483,14 +1420,24 @@ public class Vector3
             final PathPoint p = (PathPoint) o;
             this.set(p.x, p.y, p.z);
         }
-        else if (o instanceof Vec3d)
+        else if (o instanceof Vector3d)
         {
-            final Vec3d p = (Vec3d) o;
+            final Vector3d p = (Vector3d) o;
             this.set(p.x, p.y, p.z);
         }
         else if (o instanceof int[])
         {
             final int[] p = (int[]) o;
+            this.set(p[0], p[1], p[2]);
+        }
+        else if (o instanceof byte[])
+        {
+            final byte[] p = (byte[]) o;
+            this.set(p[0], p[1], p[2]);
+        }
+        else if (o instanceof short[])
+        {
+            final short[] p = (short[]) o;
             this.set(p[0], p[1], p[2]);
         }
         else if (o instanceof Double) this.x = this.y = this.z = (double) o;
@@ -1525,10 +1472,10 @@ public class Vector3
         final int z = this.intZ();
         final IChunk chunk = world.getChunk(new BlockPos(x, 0, z));
         final BiomeContainer biomes = chunk.getBiomes();
-        int i = x & BiomeContainer.HORIZONTAL_MASK;
-        int j = (int) MathHelper.clamp(y, 0, BiomeContainer.VERTICAL_MASK);
-        int k = z & BiomeContainer.HORIZONTAL_MASK;
-        int index = j << BiomeContainer.WIDTH_BITS + BiomeContainer.WIDTH_BITS | k << BiomeContainer.WIDTH_BITS | i;
+        final int i = x & BiomeContainer.HORIZONTAL_MASK;
+        final int j = (int) MathHelper.clamp(this.y, 0, BiomeContainer.VERTICAL_MASK);
+        final int k = z & BiomeContainer.HORIZONTAL_MASK;
+        final int index = j << BiomeContainer.WIDTH_BITS + BiomeContainer.WIDTH_BITS | k << BiomeContainer.WIDTH_BITS | i;
         biomes.biomes[index] = biome;
     }
 

@@ -25,7 +25,7 @@ import net.minecraft.util.Direction;
 import net.minecraft.util.ResourceLocation;
 import net.minecraft.util.math.AxisAlignedBB;
 import net.minecraft.util.math.EntityRayTraceResult;
-import net.minecraft.util.math.Vec3d;
+import net.minecraft.util.math.vector.Vector3d;
 import net.minecraftforge.common.MinecraftForge;
 import net.minecraftforge.common.capabilities.Capability;
 import net.minecraftforge.common.capabilities.CapabilityManager;
@@ -99,16 +99,16 @@ public class ThutCore
             if (event.getWorld().isAirBlock(event.getPos()))
             {
                 final PlayerEntity player = event.getPlayer();
-                final Vec3d face = event.getPlayer().getEyePosition(0);
-                final Vec3d look = event.getPlayer().getLookVec();
+                final Vector3d face = event.getPlayer().getEyePosition(0);
+                final Vector3d look = event.getPlayer().getLookVec();
                 final AxisAlignedBB box = event.getPlayer().getBoundingBox().grow(3, 3, 3);
-                final EntityRayTraceResult var = ProjectileHelper.rayTraceEntities(player.getEntityWorld(), player,
-                        face, look, box, e -> e instanceof IBlockEntity, 3);
+                final EntityRayTraceResult var = ProjectileHelper.rayTraceEntities(player, face, look, box,
+                        e -> e instanceof IBlockEntity, 3);
                 if (var != null && var.getType() == EntityRayTraceResult.Type.ENTITY)
                 {
                     final IBlockEntity entity = (IBlockEntity) var.getEntity();
                     if (entity.getInteractor().processInitialInteract(event.getPlayer(), event.getItemStack(), event
-                            .getHand()))
+                            .getHand()) != ActionResultType.PASS)
                     {
                         event.setCanceled(true);
                         return;
@@ -153,8 +153,7 @@ public class ThutCore
 
     public static ThutCore instance;
 
-    public static final Proxy proxy = DistExecutor.runForDist(() -> () -> new ClientProxy(),
-            () -> () -> new CommonProxy());
+    public static final Proxy proxy = DistExecutor.safeRunForDist(() -> ClientProxy::new, () -> CommonProxy::new);
 
     public static final ConfigHandler conf = new ConfigHandler();
 

@@ -5,9 +5,9 @@ import java.util.Map;
 import it.unimi.dsi.fastutil.objects.Object2ObjectOpenHashMap;
 import net.minecraft.util.math.BlockPos;
 import net.minecraft.util.math.ChunkPos;
+import net.minecraft.world.DimensionType;
 import net.minecraft.world.IWorld;
 import net.minecraft.world.chunk.IChunk;
-import net.minecraft.world.dimension.DimensionType;
 import net.minecraftforge.common.capabilities.ICapabilityProvider;
 import thut.api.ThutCaps;
 
@@ -90,14 +90,18 @@ public interface ITerrainProvider
         final GlobalChunkPos pos = new GlobalChunkPos(dim, cpos);
         synchronized (ITerrainProvider.lock)
         {
-            ITerrainProvider.loadedChunks.remove(pos);
+            if (ITerrainProvider.loadedChunks.containsKey(pos)) ITerrainProvider.loadedChunks.remove(pos);
         }
     }
 
     public static IChunk getChunk(final DimensionType dim, final ChunkPos cpos)
     {
         final GlobalChunkPos pos = new GlobalChunkPos(dim, cpos);
-        return ITerrainProvider.loadedChunks.get(pos);
+        synchronized (ITerrainProvider.lock)
+        {
+            if (!ITerrainProvider.loadedChunks.containsKey(pos)) return null;
+            return ITerrainProvider.loadedChunks.get(pos);
+        }
     }
 
     public static TerrainSegment removeCached(final DimensionType dim, final BlockPos pos)
@@ -126,7 +130,7 @@ public interface ITerrainProvider
         if (y > 15) y = 15;
         // Include the value for y
         final BlockPos pos = new BlockPos(temp.x, y, temp.z);
-        final DimensionType dim = world.getDimension().getType();
+        final DimensionType dim = world.getDimensionType();
         final IChunk chunk = ITerrainProvider.getChunk(dim, temp);
         final boolean real = chunk != null && chunk instanceof ICapabilityProvider;
         // This means it occurs during worldgen?

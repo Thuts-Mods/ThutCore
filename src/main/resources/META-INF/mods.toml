@@ -1,7 +1,7 @@
 modLoader="javafml"
 loaderVersion="[31,)"
 issueTrackerURL="https://github.com/Thutmose/Thut/issues"
-
+license="All rights reserved"
 
 [[mods]]
     modId="thutcore"
