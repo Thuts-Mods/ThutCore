@@ -18,7 +18,6 @@ import thut.core.common.config.Config.ConfigData;
 import thut.core.common.config.Configure;
 import thut.core.common.network.PacketHandler;
 import thut.crafts.entity.EntityCraft;
-import thut.crafts.entity.EntityTest;
 import thut.crafts.network.PacketCraftControl;
 import thut.crafts.proxy.ClientProxy;
 import thut.crafts.proxy.CommonProxy;
@@ -55,8 +54,8 @@ public class ThutCrafts
             // register a new mob here
             EntityCraft.CRAFTTYPE.setRegistryName(Reference.MODID, "craft");
             event.getRegistry().register(EntityCraft.CRAFTTYPE);
-            EntityTest.TYPE.setRegistryName(Reference.MODID, "testmob");
-            event.getRegistry().register(EntityTest.TYPE);
+            // EntityTest.TYPE.setRegistryName(Reference.MODID, "testmob");
+            // event.getRegistry().register(EntityTest.TYPE);
         }
 
         @SubscribeEvent
@@ -70,17 +69,15 @@ public class ThutCrafts
     public final static PacketHandler packets = new PacketHandler(new ResourceLocation(Reference.MODID, "comms"),
             Reference.NETVERSION);
 
-    public static Proxy proxy = DistExecutor.safeRunForDist(
-            () -> ClientProxy::new, () -> CommonProxy::new);
+    public static Proxy proxy = DistExecutor.safeRunForDist(() -> ClientProxy::new, () -> CommonProxy::new);
 
-    public static Item                CRAFTMAKER;
+    public static Item CRAFTMAKER;
 
-    public static CraftsConfig        conf    = new CraftsConfig();
+    public static CraftsConfig conf = new CraftsConfig();
 
     public ThutCrafts()
     {
-        ThutCrafts.CRAFTMAKER = new Item(new Item.Properties().group(ThutCore.THUTITEMS))
-                .setRegistryName(Reference.MODID, "craftmaker");
+        ThutCrafts.CRAFTMAKER = new Item(new Item.Properties()).setRegistryName(Reference.MODID, "craftmaker");
         // Register the setup method for modloading
         FMLJavaModLoadingContext.get().getModEventBus().addListener(this::setup);
         // Register the doClientStuff method for modloading
