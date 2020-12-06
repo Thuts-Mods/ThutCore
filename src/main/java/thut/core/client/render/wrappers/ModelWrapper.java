@@ -1,8 +1,9 @@
 package thut.core.client.render.wrappers;
 
 import java.util.Collection;
-import java.util.HashMap;
+import java.util.Collections;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 
 import com.google.common.collect.Sets;
@@ -20,6 +21,7 @@ import thut.api.maths.Vector3;
 import thut.api.maths.Vector4;
 import thut.core.client.render.animation.Animation;
 import thut.core.client.render.animation.AnimationHelper;
+import thut.core.client.render.animation.AnimationXML.Mat;
 import thut.core.client.render.animation.IAnimationChanger;
 import thut.core.client.render.model.IExtendedModelPart;
 import thut.core.client.render.model.IModel;
@@ -31,6 +33,8 @@ import thut.core.common.mobs.DefaultColourable;
 
 public class ModelWrapper<T extends Entity> extends EntityModel<T> implements IModel
 {
+    private static final HeadInfo DUMMY = new HeadInfo();
+
     public final ModelHolder       model;
     public final IModelRenderer<?> renderer;
     public IModel                  imodel;
@@ -48,40 +52,61 @@ public class ModelWrapper<T extends Entity> extends EntityModel<T> implements IM
         this.renderer = renderer;
     }
 
+    public void SetEntity(final T entity)
+    {
+        this.entityIn = entity;
+    }
+
     @Override
     public void applyAnimation(final Entity entity, final IModelRenderer<?> renderer, final float partialTicks,
             final float limbSwing)
     {
+        if (!this.isLoaded()) return;
         this.imodel.applyAnimation(entity, renderer, partialTicks, limbSwing);
     }
 
     @Override
     public HeadInfo getHeadInfo()
     {
+        if (!this.isLoaded()) return ModelWrapper.DUMMY;
         return this.imodel.getHeadInfo();
     }
 
     @Override
     public Set<String> getHeadParts()
     {
+        if (!this.isLoaded()) return Collections.emptySet();
         return this.imodel.getHeadParts();
     }
 
     @Override
-    public HashMap<String, IExtendedModelPart> getParts()
+    public Map<String, IExtendedModelPart> getParts()
     {
+        if (!this.isLoaded()) return Collections.emptyMap();
         return this.imodel.getParts();
     }
 
     @Override
     public boolean isValid()
     {
+        // Wait for the imodel before claiming to be invalid
+        if (this.imodel == null) return true;
         return this.imodel.isValid();
+    }
+
+    @Override
+    public boolean isLoaded()
+    {
+        // If we have no model, obviously not loaded yet
+        if (this.imodel == null) return false;
+        // Otherwise ask the model
+        return this.imodel.isLoaded();
     }
 
     @Override
     public void preProcessAnimations(final Collection<List<Animation>> collection)
     {
+        if (!this.isLoaded()) return;
         this.imodel.preProcessAnimations(collection);
     }
 
@@ -119,6 +144,7 @@ public class ModelWrapper<T extends Entity> extends EntityModel<T> implements IM
             final float ageInTicks, final float netHeadYaw, final float headPitch)
     {
         if (this.imodel == null) this.imodel = ModelFactory.create(this.model);
+        if (!this.isLoaded()) return;
         this.entityIn = entityIn;
         final HeadInfo info = this.imodel.getHeadInfo();
         if (info != null)
@@ -141,8 +167,8 @@ public class ModelWrapper<T extends Entity> extends EntityModel<T> implements IM
     public void render(final MatrixStack mat, final IVertexBuilder buffer, final int packedLightIn,
             final int packedOverlayIn, final float red, final float green, final float blue, final float alpha)
     {
-
         if (this.imodel == null) this.imodel = ModelFactory.create(this.model);
+        if (!this.isLoaded()) return;
         mat.push();
         this.transformGlobal(mat, buffer, this.renderer.getAnimation(this.entityIn), this.entityIn, Minecraft
                 .getInstance().getRenderPartialTicks());
@@ -198,6 +224,7 @@ public class ModelWrapper<T extends Entity> extends EntityModel<T> implements IM
             final float partialTickTime)
     {
         if (this.imodel == null) this.imodel = ModelFactory.create(this.model);
+        if (!this.isLoaded()) return;
         this.renderer.setAnimationHolder(AnimationHelper.getHolder(entityIn));
         if (this.renderer.getAnimationChanger() != null) this.renderer.setAnimation(entityIn, partialTickTime);
         this.applyAnimation(entityIn, this.renderer, partialTickTime, limbSwing);
@@ -240,6 +267,13 @@ public class ModelWrapper<T extends Entity> extends EntityModel<T> implements IM
     private void translate(final MatrixStack mat)
     {
         mat.translate(this.rotationPointX, this.rotationPointY, this.rotationPointZ);
+    }
+
+    @Override
+    public void updateMaterial(final Mat mat)
+    {
+        this.imodel.updateMaterial(mat);
+        IModel.super.updateMaterial(mat);
     }
 
 }
