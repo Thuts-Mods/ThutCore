@@ -1,14 +1,15 @@
 package thut.api.terrain;
 
-import java.util.Map;
-
-import com.google.common.collect.Maps;
-
+import it.unimi.dsi.fastutil.ints.Int2IntMap;
+import it.unimi.dsi.fastutil.ints.Int2IntOpenHashMap;
+import it.unimi.dsi.fastutil.ints.IntOpenHashSet;
+import it.unimi.dsi.fastutil.ints.IntSet;
 import net.minecraft.nbt.CompoundNBT;
 import net.minecraft.nbt.INBT;
 import net.minecraft.nbt.ListNBT;
 import net.minecraft.util.Direction;
 import net.minecraft.util.math.BlockPos;
+import net.minecraft.util.math.BlockPos.Mutable;
 import net.minecraft.world.World;
 import net.minecraft.world.chunk.IChunk;
 import net.minecraftforge.common.capabilities.Capability;
@@ -26,6 +27,10 @@ public class CapabilityTerrain
         private IChunk                               chunk;
         private final TerrainSegment[]               segments = new TerrainSegment[16];
 
+        private final boolean[] real = new boolean[16];
+
+        Mutable mutable = new Mutable();
+
         public DefaultProvider()
         {
             this.chunk = null;
@@ -39,7 +44,7 @@ public class CapabilityTerrain
         @Override
         public ITerrainProvider setChunk(final IChunk chunk)
         {
-            this.chunk = chunk;
+            if (this.chunk == null) this.chunk = chunk;
             return this;
         }
 
@@ -49,36 +54,31 @@ public class CapabilityTerrain
             final BlockPos pos = this.getChunkPos();
             final int x = pos.getX();
             final int z = pos.getZ();
-            final Map<Integer, Integer> idReplacements = Maps.newHashMap();
+            final Int2IntMap toUpdate = new Int2IntOpenHashMap();
             final ListNBT tags = (ListNBT) nbt.get("ids");
             for (int i = 0; i < tags.size(); i++)
             {
                 final CompoundNBT tag = tags.getCompound(i);
                 final String name = tag.getString("name");
                 final int id = tag.getInt("id");
-                final BiomeType type = BiomeType.getBiome(name, false);
-                if (type.getType() != id) idReplacements.put(id, type.getType());
+                final BiomeType type = BiomeType.getBiome(name, true);
+                final int newId = type.getType();
+                if (newId != id) toUpdate.put(id, type.getType());
             }
-            final boolean hasReplacements = !idReplacements.isEmpty();
+            final boolean hasReplacements = !toUpdate.isEmpty();
             for (int i = 0; i < 16; i++)
             {
                 CompoundNBT terrainTag = null;
-                try
-                {
-                    terrainTag = nbt.getCompound(i + "");
-                }
-                catch (final Exception e)
-                {
-
-                }
+                terrainTag = nbt.getCompound(i + "");
                 TerrainSegment t = null;
-                if (terrainTag != null && !terrainTag.isEmpty() && !TerrainSegment.noLoad)
+                if (!terrainTag.isEmpty() && !TerrainSegment.noLoad)
                 {
                     t = new TerrainSegment(x, i, z);
-                    if (hasReplacements) t.idReplacements = idReplacements;
+                    if (hasReplacements) t.idReplacements = toUpdate;
                     TerrainSegment.readFromNBT(t, terrainTag);
                     this.setTerrainSegment(t, i);
                     t.idReplacements = null;
+                    this.real[i] = true;
                 }
                 if (t == null)
                 {
@@ -102,7 +102,7 @@ public class CapabilityTerrain
         }
 
         @Override
-        public TerrainSegment getTerrainSegement(final BlockPos blockLocation)
+        public TerrainSegment getTerrainSegment(final BlockPos blockLocation)
         {
             final int chunkY = blockLocation.getY();
             final TerrainSegment segment = this.getTerrainSegment(chunkY);
@@ -113,14 +113,17 @@ public class CapabilityTerrain
         public TerrainSegment getTerrainSegment(int chunkY)
         {
             chunkY &= 15;
+            if (this.real[chunkY]) return this.segments[chunkY];
+
             // The pos for this segment
-            final BlockPos pos = new BlockPos(this.chunk.getPos().x, chunkY, this.chunk.getPos().z);
+            this.mutable.setPos(this.chunk.getPos().x, chunkY, this.chunk.getPos().z);
+            final BlockPos pos = this.mutable;
 
             // Try to pull it from our array
             TerrainSegment ret = this.segments[chunkY];
             // try to find any cached variants if they exist
             final TerrainSegment cached = thut.api.terrain.ITerrainProvider.removeCached(((World) this.chunk
-                    .getWorldForge()).getDimensionKey(), pos);
+                    .getWorldForge()).getDimensionKey(), this.chunk.getPos(), chunkY);
 
             // If not found, make a new one, or use cached
             if (ret == null)
@@ -136,6 +139,7 @@ public class CapabilityTerrain
             // actually real.
             ret.chunk = this.chunk;
             ret.real = true;
+            this.real[chunkY] = true;
 
             return ret;
         }
@@ -144,12 +148,15 @@ public class CapabilityTerrain
         public CompoundNBT serializeNBT()
         {
             final CompoundNBT nbt = new CompoundNBT();
+            final IntSet ids = new IntOpenHashSet();
             for (int i = 0; i < 16; i++)
             {
                 final TerrainSegment t = this.getTerrainSegment(i);
                 if (t == null) continue;
                 t.checkToSave();
                 if (!t.toSave) continue;
+                for (final int id : t.biomes)
+                    ids.add(id);
                 final CompoundNBT terrainTag = new CompoundNBT();
                 t.saveToNBT(terrainTag);
                 nbt.put("" + i, terrainTag);
@@ -157,6 +164,7 @@ public class CapabilityTerrain
             final ListNBT biomeList = new ListNBT();
             for (final BiomeType t : BiomeType.values())
             {
+                if (!ids.contains(t.getType())) continue;
                 final CompoundNBT tag = new CompoundNBT();
                 tag.putString("name", t.name);
                 tag.putInt("id", t.getType());
@@ -179,7 +187,7 @@ public class CapabilityTerrain
     {
         BlockPos getChunkPos();
 
-        TerrainSegment getTerrainSegement(BlockPos blockLocation);
+        TerrainSegment getTerrainSegment(BlockPos blockLocation);
 
         TerrainSegment getTerrainSegment(int chunkY);
 

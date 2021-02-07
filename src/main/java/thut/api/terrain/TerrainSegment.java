@@ -1,11 +1,17 @@
 package thut.api.terrain;
 
-import java.util.*;
+import java.util.Arrays;
+import java.util.Collection;
+import java.util.Comparator;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Set;
 import java.util.function.Predicate;
 
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
 
+import it.unimi.dsi.fastutil.ints.Int2IntMap;
 import net.minecraft.block.Block;
 import net.minecraft.block.BlockState;
 import net.minecraft.block.Blocks;
@@ -75,7 +81,7 @@ public class TerrainSegment
                 {
                     // If it isn't a water biome, define it as a lake if more
                     // than a certain amount of water.
-                    final int water = v.blockCount2(world, Blocks.WATER, 3);
+                    final int water = TerrainSegment.count(world, Blocks.WATER, v, 3);
                     if (water > 4)
                     {
                         biome = BiomeType.LAKE.getType();
@@ -164,7 +170,9 @@ public class TerrainSegment
     //@formatter:off
     public static Predicate<Integer> saveChecker = (i) -> !(i == -1
                                                          || i == BiomeType.CAVE.getType()
+                                                         || i == BiomeType.CAVE_WATER.getType()
                                                          || i == BiomeType.SKY.getType()
+                                                         || i == BiomeType.FLOWER.getType()
                                                          || i == BiomeType.NONE.getType());
     //@formatter:on
 
@@ -240,12 +248,12 @@ public class TerrainSegment
                 biomes[i] = t.idReplacements.get(biomes[i]);
                 replacements = true;
             }
-        if (replacements) System.out.println("Replacement subbiomes found for " + t.chunkX + " " + t.chunkY + " "
+        if (replacements) ThutCore.LOGGER.info("Replacement subbiomes found for " + t.chunkX + " " + t.chunkY + " "
                 + t.chunkZ);
         t.setBiome(biomes);
     }
 
-    public Map<Integer, Integer> idReplacements;
+    public Int2IntMap idReplacements;
 
     public final int chunkX;
 
@@ -328,16 +336,12 @@ public class TerrainSegment
 
     void checkToSave()
     {
-        final int subCount = this.biomes.length;
-        for (int i = 0; i < subCount; i++)
-        {
-            final int temp1 = this.biomes[i];
-            if (TerrainSegment.saveChecker.test(temp1))
+        for (final int i : this.biomes)
+            if (TerrainSegment.saveChecker.test(i))
             {
                 this.toSave = true;
                 return;
             }
-        }
         this.toSave = false;
     }
 

@@ -12,6 +12,7 @@ import thut.api.maths.vecmath.Vector3f;
 import thut.core.client.render.model.Vertex;
 import thut.core.client.render.texturing.IPartTexturer;
 import thut.core.client.render.texturing.TextureCoordinate;
+import thut.core.common.ThutCore;
 
 public abstract class Mesh
 {
@@ -76,7 +77,7 @@ public abstract class Mesh
     }
 
     private final net.minecraft.util.math.vector.Vector3f dummy3 = new net.minecraft.util.math.vector.Vector3f();
-    private final Vector4f                               dummy4 = new Vector4f();
+    private final Vector4f                                dummy4 = new Vector4f();
 
     protected void doRender(final MatrixStack mat, final IVertexBuilder buffer, final IPartTexturer texturer)
     {
@@ -85,19 +86,24 @@ public abstract class Mesh
 
         TextureCoordinate textureCoordinate = new TextureCoordinate(0, 0);
         final boolean flat = this.material.flat;
-        final int red = this.rgbabro[0];
-        final int green = this.rgbabro[1];
-        final int blue = this.rgbabro[2];
-        int alpha = this.rgbabro[3];
+        final float red = this.rgbabro[0] / 255f;
+        final float green = this.rgbabro[1] / 255f;
+        final float blue = this.rgbabro[2] / 255f;
+        final float alpha = this.material.alpha * this.rgbabro[3] / 255f;
         final int lightmapUV = this.rgbabro[4];
         final int overlayUV = this.rgbabro[5];
-        alpha = (int) (this.material.alpha * alpha);
         int n = 0;
         final MatrixStack.Entry matrixstack$entry = mat.getLast();
         final Matrix4f pos = matrixstack$entry.getMatrix();
         final Matrix3f norms = matrixstack$entry.getNormal();
         final Vector4f dp = this.dummy4;
         final net.minecraft.util.math.vector.Vector3f dn = this.dummy3;
+
+        if (this.order.length % 3 != 0)
+        {
+            ThutCore.LOGGER.error("Mesh with illegal size! " + this.name);
+            return;
+        }
 
         for (final Integer i : this.order)
         {
@@ -124,14 +130,13 @@ public abstract class Mesh
 
             // We use the default Item format, since that is what mobs use.
             // This means we need these in this order!
-            buffer//@formatter:off
-            .pos(dp.getX(), dp.getY(), dp.getZ())
-            .color(red, green, blue, alpha)
-            .tex(u, v)
-            .overlay(overlayUV)
-            .lightmap(lightmapUV)
-            .normal(dn.getX(), dn.getY(), dn.getZ())
-            .endVertex();
+            buffer.addVertex(
+            //@formatter:off
+                dp.getX(), dp.getY(), dp.getZ(),
+                red, green, blue, alpha,
+                u, v,
+                overlayUV, lightmapUV,
+                dn.getX(), dn.getY(), dn.getZ());
             //@formatter:on
             n++;
         }
@@ -156,7 +161,6 @@ public abstract class Mesh
             this.rgbabro[4] = j << 20 | j << 4;
         }
         this.doRender(mat, buffer, texturer);
-        this.material.postRender(mat);
     }
 
     public void setMaterial(final Material material)

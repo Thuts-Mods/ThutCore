@@ -1,6 +1,7 @@
 package thut.api.terrain;
 
 import net.minecraft.entity.Entity;
+import net.minecraft.entity.player.ServerPlayerEntity;
 import net.minecraft.util.RegistryKey;
 import net.minecraft.util.ResourceLocation;
 import net.minecraft.util.math.BlockPos;
@@ -11,12 +12,14 @@ import net.minecraft.world.chunk.Chunk;
 import net.minecraft.world.server.ServerWorld;
 import net.minecraftforge.event.AttachCapabilitiesEvent;
 import net.minecraftforge.event.world.ChunkEvent;
+import net.minecraftforge.event.world.ChunkWatchEvent;
 import net.minecraftforge.event.world.WorldEvent;
 import net.minecraftforge.eventbus.api.SubscribeEvent;
 import net.minecraftforge.server.permission.DefaultPermissionLevel;
 import net.minecraftforge.server.permission.PermissionAPI;
 import thut.api.maths.Vector3;
 import thut.api.terrain.CapabilityTerrain.DefaultProvider;
+import thut.core.common.network.TerrainUpdate;
 
 public class TerrainManager
 {
@@ -48,6 +51,7 @@ public class TerrainManager
 
     public static boolean isAreaLoaded(final IWorld world, final BlockPos blockPos, final double distance)
     {
+        if (world.isRemote()) return world.getChunk(blockPos) != null;
         RegistryKey<World> dim = null;
         if (world instanceof World) dim = ((World) world).getDimensionKey();
         return TerrainManager.isAreaLoaded(dim, blockPos, distance);
@@ -90,7 +94,8 @@ public class TerrainManager
     public static void onChunkLoad(final ChunkEvent.Load evt)
     {
         RegistryKey<World> dim = null;
-        if (evt.getWorld() instanceof World) dim = ((World) evt.getWorld()).getDimensionKey();
+        if (evt.getWorld() instanceof World && !evt.getWorld().isRemote()) dim = ((World) evt.getWorld())
+                .getDimensionKey();
         // This is null when this is loaded off-thread, IE before the chunk is
         // finished
         if (dim != null) ITerrainProvider.addChunk(dim, evt.getChunk());
@@ -100,8 +105,16 @@ public class TerrainManager
     public static void onChunkUnload(final ChunkEvent.Unload evt)
     {
         RegistryKey<World> dim = null;
-        if (evt.getWorld() instanceof World) dim = ((World) evt.getWorld()).getDimensionKey();
+        if (evt.getWorld() instanceof World && !evt.getWorld().isRemote()) dim = ((World) evt.getWorld())
+                .getDimensionKey();
         if (dim != null) ITerrainProvider.removeChunk(dim, evt.getChunk().getPos());
+    }
+
+    @SubscribeEvent
+    public static void onChunkWatch(final ChunkWatchEvent.Watch event)
+    {
+        final ServerPlayerEntity player = event.getPlayer();
+        TerrainUpdate.sendTerrainToClient(event.getPos(), player);
     }
 
     @SubscribeEvent
