@@ -9,7 +9,6 @@ import javax.annotation.Nullable;
 import com.mojang.blaze3d.matrix.MatrixStack;
 
 import net.minecraft.entity.Entity;
-import net.minecraft.entity.MobEntity;
 import thut.api.ModelHolder;
 import thut.api.maths.Vector3;
 import thut.api.maths.Vector4;
@@ -18,7 +17,7 @@ import thut.core.client.render.animation.CapabilityAnimation.IAnimationHolder;
 import thut.core.client.render.animation.IAnimationChanger;
 import thut.core.client.render.texturing.IPartTexturer;
 
-public interface IModelRenderer<T extends MobEntity>
+public interface IModelRenderer<T extends Entity>
 {
     public static class Vector5
     {
@@ -46,9 +45,10 @@ public interface IModelRenderer<T extends MobEntity>
 
     public static final String DEFAULTPHASE = "idle";
 
-    static final Vector3       DEFAULTSCALE = Vector3.getNewVector().set(1);
+    static final Vector3 DEFAULTSCALE = Vector3.getNewVector().set(1);
 
-    default void doRender(T entity, double d, double d1, double d2, float f, float partialTick)
+    default void doRender(final T entity, final double d, final double d1, final double d2, final float f,
+            final float partialTick)
     {
 
     }
@@ -91,18 +91,12 @@ public interface IModelRenderer<T extends MobEntity>
         final IAnimationHolder holder = this.getAnimationHolder();
         final String phase = this.getAnimation(entity);
         final List<Animation> anim = this.getAnimations(entity, phase);
-        if (holder != null && anim != null && !anim.isEmpty())
-        {
-            phase.toString();
-            // System.out.println(anim + " " + holder.getPendingAnimations() + "
-            // " + holder.getPlaying().size());
-            // System.out.println(holder.getPlaying());
-            holder.setPendingAnimations(anim, phase);
-        }
+        if (holder != null && anim != null && !anim.isEmpty()) holder.setPendingAnimations(anim, phase);
     }
 
     default List<Animation> getAnimations(final Entity entity, final String phase)
     {
+        if (this.getAnimations() != null) return this.getAnimations().get(phase);
         return null;
     }
 

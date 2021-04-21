@@ -116,14 +116,14 @@ public class CapabilityTerrain
             if (this.real[chunkY]) return this.segments[chunkY];
 
             // The pos for this segment
-            this.mutable.setPos(this.chunk.getPos().x, chunkY, this.chunk.getPos().z);
+            this.mutable.set(this.chunk.getPos().x, chunkY, this.chunk.getPos().z);
             final BlockPos pos = this.mutable;
 
             // Try to pull it from our array
             TerrainSegment ret = this.segments[chunkY];
             // try to find any cached variants if they exist
             final TerrainSegment cached = thut.api.terrain.ITerrainProvider.removeCached(((World) this.chunk
-                    .getWorldForge()).getDimensionKey(), this.chunk.getPos(), chunkY);
+                    .getWorldForge()).dimension(), this.chunk.getPos(), chunkY);
 
             // If not found, make a new one, or use cached
             if (ret == null)
@@ -153,7 +153,6 @@ public class CapabilityTerrain
             {
                 final TerrainSegment t = this.getTerrainSegment(i);
                 if (t == null) continue;
-                t.checkToSave();
                 if (!t.toSave) continue;
                 for (final int id : t.biomes)
                     ids.add(id);

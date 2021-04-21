@@ -7,10 +7,12 @@ import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 
 import net.minecraft.util.RegistryKey;
+import net.minecraft.util.registry.DynamicRegistries;
+import net.minecraft.util.registry.MutableRegistry;
 import net.minecraft.util.registry.Registry;
 import net.minecraft.world.biome.Biome;
 import net.minecraftforge.common.BiomeDictionary;
-import net.minecraftforge.registries.ForgeRegistries;
+import thut.core.common.ThutCore;
 
 public class BiomeDatabase
 {
@@ -20,12 +22,14 @@ public class BiomeDatabase
 
     public static RegistryKey<Biome> getKey(final Biome b)
     {
-        return RegistryKey.getOrCreateKey(Registry.BIOME_KEY, b.getRegistryName());
+        return RegistryKey.create(Registry.BIOME_REGISTRY, b.getRegistryName());
     }
 
     public static Biome getBiome(final RegistryKey<Biome> key)
     {
-        return ForgeRegistries.BIOMES.getValue(key.getLocation());
+        final DynamicRegistries REG = ThutCore.proxy.getRegistries();
+        final MutableRegistry<Biome> biomes = REG.registryOrThrow(Registry.BIOME_REGISTRY);
+        return biomes.get(key.location());
     }
 
     public static boolean isAType(final String name)
@@ -52,16 +56,6 @@ public class BiomeDatabase
         if (!BiomeDatabase.isAType(type)) return false;
         final BiomeDictionary.Type t = BiomeDatabase.TYPES.get(type);
         return BiomeDictionary.hasType(b, t);
-    }
-
-    public static String getBiomeName(final Biome biome)
-    {
-        return biome.getRegistryName().getNamespace();
-    }
-
-    public static String getUnlocalizedNameFromType(final int type)
-    {
-        return BiomeType.getType(type).readableName;
     }
 
 }

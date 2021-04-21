@@ -8,9 +8,9 @@ import java.util.UUID;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 
+import net.minecraft.entity.Entity;
 import net.minecraft.util.math.vector.Quaternion;
 import net.minecraft.util.math.vector.Vector3f;
-import net.minecraft.entity.Entity;
 import thut.api.maths.Vector3;
 import thut.api.maths.Vector4;
 import thut.core.client.render.animation.CapabilityAnimation.IAnimationHolder;
@@ -75,9 +75,9 @@ public class AnimationHelper
             part.setPreTranslations(temp);
             part.setPreScale(temp.set(sx, sy, sz));
             final Quaternion quat = new Quaternion(0, 0, 0, 1);
-            if (z != 0) quat.multiply(Vector3f.YN.rotationDegrees(z));
-            if (x != 0) quat.multiply(Vector3f.XP.rotationDegrees(x));
-            if (y != 0) quat.multiply(Vector3f.ZP.rotationDegrees(y));
+            if (z != 0) quat.mul(Vector3f.YN.rotationDegrees(z));
+            if (x != 0) quat.mul(Vector3f.XP.rotationDegrees(x));
+            if (y != 0) quat.mul(Vector3f.ZP.rotationDegrees(y));
             part.setPreRotations(new Vector4(quat));
         }
         return animated;
@@ -93,7 +93,7 @@ public class AnimationHelper
             list = Lists.newArrayList(holder.getPlaying());
             for (final Animation animation : list)
                 animate = AnimationHelper.animate(animation, holder, partName, part, partialTick, limbSwing,
-                        entity.ticksExisted) || animate;
+                        entity.tickCount) || animate;
         }
         return animate;
     }
@@ -102,12 +102,12 @@ public class AnimationHelper
     {
         final IAnimationHolder cap = mob.getCapability(CapabilityAnimation.CAPABILITY).orElse(null);
         if (cap != null) return cap;
-        if (AnimationHelper.holderMap.containsKey(mob.getUniqueID())) return AnimationHelper.holderMap.get(mob
-                .getUniqueID());
+        if (AnimationHelper.holderMap.containsKey(mob.getUUID())) return AnimationHelper.holderMap.get(mob
+                .getUUID());
         else
         {
             final CapabilityAnimation.DefaultImpl holder = new CapabilityAnimation.DefaultImpl();
-            AnimationHelper.holderMap.put(mob.getUniqueID(), holder);
+            AnimationHelper.holderMap.put(mob.getUUID(), holder);
             return holder;
         }
     }

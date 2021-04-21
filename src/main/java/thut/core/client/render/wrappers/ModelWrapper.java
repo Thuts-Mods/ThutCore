@@ -1,5 +1,6 @@
 package thut.core.client.render.wrappers;
 
+import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
@@ -11,29 +12,48 @@ import com.mojang.blaze3d.matrix.MatrixStack;
 import com.mojang.blaze3d.vertex.IVertexBuilder;
 
 import net.minecraft.client.Minecraft;
+import net.minecraft.client.renderer.IRenderTypeBuffer;
 import net.minecraft.client.renderer.entity.model.EntityModel;
 import net.minecraft.entity.Entity;
+import net.minecraft.util.ResourceLocation;
 import net.minecraft.util.math.vector.Quaternion;
 import net.minecraft.util.math.vector.Vector3f;
+import net.minecraftforge.api.distmarker.Dist;
+import net.minecraftforge.client.event.TextureStitchEvent;
+import net.minecraftforge.eventbus.api.SubscribeEvent;
+import net.minecraftforge.fml.common.Mod;
 import thut.api.ModelHolder;
 import thut.api.entity.IMobColourable;
 import thut.api.maths.Vector3;
 import thut.api.maths.Vector4;
 import thut.core.client.render.animation.Animation;
 import thut.core.client.render.animation.AnimationHelper;
+import thut.core.client.render.animation.AnimationLoader;
 import thut.core.client.render.animation.AnimationXML.Mat;
+import thut.core.client.render.animation.CapabilityAnimation.IAnimationHolder;
 import thut.core.client.render.animation.IAnimationChanger;
 import thut.core.client.render.model.IExtendedModelPart;
 import thut.core.client.render.model.IModel;
 import thut.core.client.render.model.IModelRenderer;
 import thut.core.client.render.model.IModelRenderer.Vector5;
 import thut.core.client.render.model.ModelFactory;
+import thut.core.client.render.texturing.IPartTexturer;
 import thut.core.client.render.texturing.IRetexturableModel;
+import thut.core.common.ThutCore;
 import thut.core.common.mobs.DefaultColourable;
 
+@Mod.EventBusSubscriber(bus = Mod.EventBusSubscriber.Bus.MOD, modid = ThutCore.MODID, value = Dist.CLIENT)
 public class ModelWrapper<T extends Entity> extends EntityModel<T> implements IModel
 {
     private static final HeadInfo DUMMY = new HeadInfo();
+
+    private static final Set<ModelWrapper<?>> WRAPPERS = Sets.newHashSet();
+
+    @SubscribeEvent
+    public static void onTextureReload(final TextureStitchEvent.Post event)
+    {
+        ModelWrapper.WRAPPERS.clear();
+    }
 
     public final ModelHolder       model;
     public final IModelRenderer<?> renderer;
@@ -50,6 +70,7 @@ public class ModelWrapper<T extends Entity> extends EntityModel<T> implements IM
     {
         this.model = model;
         this.renderer = renderer;
+        Arrays.fill(this.tmp, 255);
     }
 
     public void SetEntity(final T entity)
@@ -140,10 +161,17 @@ public class ModelWrapper<T extends Entity> extends EntityModel<T> implements IM
     }
 
     @Override
-    public void setRotationAngles(final T entityIn, final float limbSwing, final float limbSwingAmount,
-            final float ageInTicks, final float netHeadYaw, final float headPitch)
+    public void setupAnim(final T entityIn, final float limbSwing, final float limbSwingAmount, final float ageInTicks,
+            final float netHeadYaw, final float headPitch)
     {
-        if (this.imodel == null) this.imodel = ModelFactory.create(this.model);
+        if (ModelWrapper.WRAPPERS.add(this)) this.imodel = null;
+        if (this.imodel == null)
+        {
+            this.imodel = ModelFactory.create(this.model);
+            if (this.imodel != null) AnimationLoader.parse(this.model, this, this.renderer);
+            final IAnimationHolder holder = this.renderer.getAnimationHolder();
+            if (holder != null) holder.clean();
+        }
         if (!this.isLoaded()) return;
         this.entityIn = entityIn;
         final HeadInfo info = this.imodel.getHeadInfo();
@@ -152,7 +180,7 @@ public class ModelWrapper<T extends Entity> extends EntityModel<T> implements IM
             info.headPitch = headPitch;
             info.headYaw = netHeadYaw;
         }
-        if (info != null) info.currentTick = entityIn.ticksExisted;
+        if (info != null) info.currentTick = entityIn.tickCount;
         final IAnimationChanger animChanger = this.renderer.getAnimationChanger();
         final Set<String> excluded = Sets.newHashSet();
         if (animChanger != null) for (final String partName : this.imodel.getParts().keySet())
@@ -160,18 +188,18 @@ public class ModelWrapper<T extends Entity> extends EntityModel<T> implements IM
             if (animChanger.isPartHidden(partName, entityIn, false)) excluded.add(partName);
             if (this.renderer.getTexturer() != null) this.renderer.getTexturer().bindObject(entityIn);
         }
-        if (info != null) info.lastTick = entityIn.ticksExisted;
+        if (info != null) info.lastTick = entityIn.tickCount;
     }
 
     @Override
-    public void render(final MatrixStack mat, final IVertexBuilder buffer, final int packedLightIn,
+    public void renderToBuffer(final MatrixStack mat, final IVertexBuilder buffer, final int packedLightIn,
             final int packedOverlayIn, final float red, final float green, final float blue, final float alpha)
     {
         if (this.imodel == null) this.imodel = ModelFactory.create(this.model);
         if (!this.isLoaded()) return;
-        mat.push();
+        mat.pushPose();
         this.transformGlobal(mat, buffer, this.renderer.getAnimation(this.entityIn), this.entityIn, Minecraft
-                .getInstance().getRenderPartialTicks());
+                .getInstance().getFrameTime());
 
         final IAnimationChanger animChanger = this.renderer.getAnimationChanger();
         final Set<String> excluded = Sets.newHashSet();
@@ -192,10 +220,10 @@ public class ModelWrapper<T extends Entity> extends EntityModel<T> implements IM
 
                 if (part.getParent() == null)
                 {
-                    mat.push();
+                    mat.pushPose();
                     this.initColours(part, this.entityIn, packedLightIn, packedOverlayIn);
                     part.renderAllExcept(mat, buffer, this.renderer, excluded.toArray(new String[excluded.size()]));
-                    mat.pop();
+                    mat.popPose();
                 }
             }
             catch (final Exception e)
@@ -203,13 +231,27 @@ public class ModelWrapper<T extends Entity> extends EntityModel<T> implements IM
                 e.printStackTrace();
             }
         }
-        mat.pop();
+        mat.popPose();
     }
 
     protected void rotate(final MatrixStack mat)
     {
         final Vector3f axis = new Vector3f(this.rotateAngleX, this.rotateAngleY, this.rotateAngleZ);
-        mat.rotate(new Quaternion(axis, this.rotateAngle, true));
+        mat.mulPose(new Quaternion(axis, this.rotateAngle, true));
+    }
+
+    public void setMob(final T entity, final IRenderTypeBuffer bufferIn, final ResourceLocation default_)
+    {
+        final IPartTexturer texer = this.renderer.getTexturer();
+        if (texer != null)
+        {
+            texer.bindObject(entity);
+            this.getParts().forEach((n, p) ->
+            {
+                p.applyTexture(bufferIn, default_, texer);
+            });
+        }
+        this.SetEntity(entity);
     }
 
     /**
@@ -220,14 +262,17 @@ public class ModelWrapper<T extends Entity> extends EntityModel<T> implements IM
      * setRotationAngles method.
      */
     @Override
-    public void setLivingAnimations(final T entityIn, final float limbSwing, final float limbSwingAmount,
+    public void prepareMobModel(final T entityIn, final float limbSwing, final float limbSwingAmount,
             final float partialTickTime)
     {
         if (this.imodel == null) this.imodel = ModelFactory.create(this.model);
         if (!this.isLoaded()) return;
-        this.renderer.setAnimationHolder(AnimationHelper.getHolder(entityIn));
+        final IAnimationHolder holder = AnimationHelper.getHolder(entityIn);
+        holder.preRun();
+        this.renderer.setAnimationHolder(holder);
         if (this.renderer.getAnimationChanger() != null) this.renderer.setAnimation(entityIn, partialTickTime);
         this.applyAnimation(entityIn, this.renderer, partialTickTime, limbSwing);
+        holder.postRun();
     }
 
     @Override
