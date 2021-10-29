@@ -1,7 +1,5 @@
 package thut.api.particle;
 
-import java.util.Random;
-
 import net.minecraft.particles.IParticleData;
 import net.minecraft.particles.ParticleType;
 import net.minecraft.util.ResourceLocation;
@@ -69,7 +67,7 @@ public class ThutParticles
             particle.setTex(textures);
             int life = 32;
             if (args.length > 1) life = args[1];
-            particle.setStartTime(new Random().nextInt(100));
+            particle.setStartTime(ThutCore.newRandom().nextInt(100));
             particle.setAnimSpeed(1);
             particle.setLifetime(life);
             particle.setSize(0.1f);

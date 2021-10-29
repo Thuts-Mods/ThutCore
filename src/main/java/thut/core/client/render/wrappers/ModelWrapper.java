@@ -3,7 +3,6 @@ package thut.core.client.render.wrappers;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
-import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
@@ -28,7 +27,6 @@ import thut.api.maths.Vector3;
 import thut.api.maths.Vector4;
 import thut.core.client.render.animation.Animation;
 import thut.core.client.render.animation.AnimationHelper;
-import thut.core.client.render.animation.AnimationLoader;
 import thut.core.client.render.animation.AnimationXML.Mat;
 import thut.core.client.render.animation.CapabilityAnimation.IAnimationHolder;
 import thut.core.client.render.animation.IAnimationChanger;
@@ -52,7 +50,7 @@ public class ModelWrapper<T extends Entity> extends EntityModel<T> implements IM
     @SubscribeEvent
     public static void onTextureReload(final TextureStitchEvent.Post event)
     {
-        ModelWrapper.WRAPPERS.clear();
+        ModelWrapper.WRAPPERS.forEach(w -> w.imodel = null);
     }
 
     public final ModelHolder       model;
@@ -70,6 +68,7 @@ public class ModelWrapper<T extends Entity> extends EntityModel<T> implements IM
     {
         this.model = model;
         this.renderer = renderer;
+        ModelWrapper.WRAPPERS.add(this);
         Arrays.fill(this.tmp, 255);
     }
 
@@ -89,14 +88,14 @@ public class ModelWrapper<T extends Entity> extends EntityModel<T> implements IM
     @Override
     public HeadInfo getHeadInfo()
     {
-        if (!this.isLoaded()) return ModelWrapper.DUMMY;
+        if (this.imodel == null) return ModelWrapper.DUMMY;
         return this.imodel.getHeadInfo();
     }
 
     @Override
     public Set<String> getHeadParts()
     {
-        if (!this.isLoaded()) return Collections.emptySet();
+        if (this.imodel == null) return Collections.emptySet();
         return this.imodel.getHeadParts();
     }
 
@@ -125,7 +124,7 @@ public class ModelWrapper<T extends Entity> extends EntityModel<T> implements IM
     }
 
     @Override
-    public void preProcessAnimations(final Collection<List<Animation>> collection)
+    public void preProcessAnimations(final Collection<Animation> collection)
     {
         if (!this.isLoaded()) return;
         this.imodel.preProcessAnimations(collection);
@@ -164,14 +163,6 @@ public class ModelWrapper<T extends Entity> extends EntityModel<T> implements IM
     public void setupAnim(final T entityIn, final float limbSwing, final float limbSwingAmount, final float ageInTicks,
             final float netHeadYaw, final float headPitch)
     {
-        if (ModelWrapper.WRAPPERS.add(this)) this.imodel = null;
-        if (this.imodel == null)
-        {
-            this.imodel = ModelFactory.create(this.model);
-            if (this.imodel != null) AnimationLoader.parse(this.model, this, this.renderer);
-            final IAnimationHolder holder = this.renderer.getAnimationHolder();
-            if (holder != null) holder.clean();
-        }
         if (!this.isLoaded()) return;
         this.entityIn = entityIn;
         final HeadInfo info = this.imodel.getHeadInfo();
