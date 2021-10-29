@@ -5,15 +5,15 @@ import java.util.Map;
 import java.util.Set;
 
 import com.google.common.collect.ImmutableSet;
-import com.mojang.blaze3d.matrix.MatrixStack;
+import com.mojang.blaze3d.vertex.PoseStack;
+import com.mojang.math.Quaternion;
 
-import net.minecraft.entity.Entity;
-import net.minecraft.util.math.vector.Quaternion;
+import net.minecraft.world.entity.Entity;
+import thut.api.entity.IAnimated.IAnimationHolder;
+import thut.api.entity.animation.Animation;
 import thut.api.maths.Vector3;
 import thut.api.maths.vecmath.Vector3f;
-import thut.core.client.render.animation.Animation;
 import thut.core.client.render.animation.AnimationXML.Mat;
-import thut.core.client.render.animation.CapabilityAnimation.IAnimationHolder;
 import thut.core.client.render.model.parts.Material;
 import thut.core.common.ThutCore;
 
@@ -24,37 +24,6 @@ public interface IModel
         void run(IModel model);
     }
 
-    public static class HeadInfo
-    {
-        /**
-         * This should be updated to match the mob, incase the IModel needs to
-         * do custom rendering itself.
-         */
-        public float headYaw;
-        /**
-         * This should be updated to match the mob, incase the IModel needs to
-         * do custom rendering itself.
-         */
-        public float headPitch;
-
-        /** This is the current ticksExisted for the object being rendered.. */
-        public int currentTick = 0;
-        /**
-         * This is the ticksExisted before this render tick for the object
-         * being rendered
-         */
-        public int lastTick    = 0;
-
-        public float yawCapMax      = 180;
-        public float yawCapMin      = -180;
-        public float pitchCapMax    = 40;
-        public float pitchCapMin    = -40;
-        public int   yawAxis        = 1;
-        public int   pitchAxis      = 0;
-        public int   yawDirection   = 1;
-        public int   pitchDirection = 1;
-    }
-
     public static ImmutableSet<String> emptyAnims = ImmutableSet.of();
 
     void applyAnimation(Entity entity, IModelRenderer<?> renderer, float partialTicks, float limbSwing);
@@ -63,8 +32,6 @@ public interface IModel
     {
         return IModel.emptyAnims;
     }
-
-    HeadInfo getHeadInfo();
 
     Set<String> getHeadParts();
 
@@ -81,7 +48,7 @@ public interface IModel
      * @param mat
      * @param dy
      */
-    default void globalFix(final MatrixStack mat, final float dx, final float dy, final float dz)
+    default void globalFix(final PoseStack mat, final float dx, final float dy, final float dz)
     {
         // These are the parameters for models exported from blender.
         mat.mulPose(new Quaternion(90, 0, 180, true));
@@ -106,11 +73,6 @@ public interface IModel
     }
 
     void preProcessAnimations(Collection<Animation> collection);
-
-    default void setHeadInfo(final HeadInfo in)
-    {
-
-    }
 
     default void setOffset(final Vector3 offset)
     {

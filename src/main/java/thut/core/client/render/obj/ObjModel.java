@@ -14,16 +14,17 @@ import java.util.regex.Pattern;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
-import com.mojang.blaze3d.matrix.MatrixStack;
-import com.mojang.blaze3d.vertex.IVertexBuilder;
+import com.mojang.blaze3d.vertex.PoseStack;
+import com.mojang.blaze3d.vertex.VertexConsumer;
+import com.mojang.math.Vector3f;
 
 import net.minecraft.client.Minecraft;
-import net.minecraft.entity.Entity;
-import net.minecraft.resources.IResource;
-import net.minecraft.util.ResourceLocation;
-import net.minecraft.util.math.vector.Vector3f;
+import net.minecraft.resources.ResourceLocation;
+import net.minecraft.server.packs.resources.Resource;
+import net.minecraft.world.entity.Entity;
+import thut.api.entity.IAnimated.HeadInfo;
+import thut.api.entity.animation.Animation;
 import thut.api.maths.Vector4;
-import thut.core.client.render.animation.Animation;
 import thut.core.client.render.animation.AnimationHelper;
 import thut.core.client.render.animation.IAnimationChanger;
 import thut.core.client.render.model.IExtendedModelPart;
@@ -42,7 +43,6 @@ public class ObjModel implements IModelCustom, IModel, IRetexturableModel
     public HashMap<String, IExtendedModelPart> parts = new HashMap<>();
     Map<String, Material>                      mats  = Maps.newHashMap();
     Set<String>                                heads = Sets.newHashSet();
-    final HeadInfo                             info  = new HeadInfo();
     public String                              name;
     private boolean                            valid = true;
 
@@ -64,12 +64,6 @@ public class ObjModel implements IModelCustom, IModel, IRetexturableModel
         // this.updateAnimation(entity, renderer, renderer.getAnimation(entity),
         // partialTicks, this.getHeadInfo().headYaw,
         // this.getHeadInfo().headYaw, limbSwing, 0);
-    }
-
-    @Override
-    public HeadInfo getHeadInfo()
-    {
-        return this.info;
     }
 
     @Override
@@ -100,7 +94,7 @@ public class ObjModel implements IModelCustom, IModel, IRetexturableModel
         this.valid = true;
         try
         {
-            final IResource res = Minecraft.getInstance().getResourceManager().getResource(model);
+            final Resource res = Minecraft.getInstance().getResourceManager().getResource(model);
             if (res == null)
             {
                 this.valid = false;
@@ -241,28 +235,28 @@ public class ObjModel implements IModelCustom, IModel, IRetexturableModel
     }
 
     @Override
-    public void renderAll(final MatrixStack mat, final IVertexBuilder buffer)
+    public void renderAll(final PoseStack mat, final VertexConsumer buffer)
     {
         for (final IExtendedModelPart o : this.parts.values())
             if (o.getParent() == null) o.renderAll(mat, buffer);
     }
 
     @Override
-    public void renderAllExcept(final MatrixStack mat, final IVertexBuilder buffer, final String... excludedGroupNames)
+    public void renderAllExcept(final PoseStack mat, final VertexConsumer buffer, final String... excludedGroupNames)
     {
         for (final IExtendedModelPart o : this.parts.values())
             if (o.getParent() == null) o.renderAllExcept(mat, buffer, excludedGroupNames);
     }
 
     @Override
-    public void renderOnly(final MatrixStack mat, final IVertexBuilder buffer, final String... groupNames)
+    public void renderOnly(final PoseStack mat, final VertexConsumer buffer, final String... groupNames)
     {
         for (final IExtendedModelPart o : this.parts.values())
             if (o.getParent() == null) o.renderOnly(mat, buffer, groupNames);
     }
 
     @Override
-    public void renderPart(final MatrixStack mat, final IVertexBuilder buffer, final String partName)
+    public void renderPart(final PoseStack mat, final VertexConsumer buffer, final String partName)
     {
         for (final IExtendedModelPart o : this.parts.values())
             if (o.getParent() == null) o.renderPart(mat, buffer, partName);
@@ -295,7 +289,7 @@ public class ObjModel implements IModelCustom, IModel, IRetexturableModel
     }
 
     @Override
-    public void globalFix(final MatrixStack mat, final float dx, final float dy, final float dz)
+    public void globalFix(final PoseStack mat, final float dx, final float dy, final float dz)
     {
         // FIXME obj rotation
         mat.mulPose(Vector3f.XP.rotationDegrees(180));
@@ -308,7 +302,8 @@ public class ObjModel implements IModelCustom, IModel, IRetexturableModel
             final float limbSwing, final int brightnessIn)
     {
         if (parent == null) return;
-        final HeadInfo info = this.getHeadInfo();
+
+        final HeadInfo info = renderer.getAnimationHolder().getHeadInfo();
 
         parent.resetToInit();
         final boolean anim = renderer.getAnimations().containsKey(currentPhase);
@@ -316,7 +311,7 @@ public class ObjModel implements IModelCustom, IModel, IRetexturableModel
                 parent, partialTick, limbSwing))
         {
         }
-        if (info != null && this.isHead(parent.getName()))
+        if (this.isHead(parent.getName()))
         {
             float ang;
             float ang2 = -info.headPitch;

@@ -7,9 +7,10 @@ import java.util.Set;
 
 import javax.annotation.Nullable;
 
-import net.minecraft.entity.Entity;
+import net.minecraft.world.entity.Entity;
+import thut.api.entity.IAnimated.IAnimationHolder;
+import thut.api.entity.animation.Animation;
 import thut.api.maths.Vector3;
-import thut.core.client.render.animation.CapabilityAnimation.IAnimationHolder;
 import thut.core.common.ThutCore;
 
 public interface IAnimationChanger

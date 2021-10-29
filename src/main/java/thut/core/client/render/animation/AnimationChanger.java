@@ -10,13 +10,14 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 
-import net.minecraft.entity.Entity;
-import net.minecraft.item.DyeColor;
+import net.minecraft.world.entity.Entity;
+import net.minecraft.world.item.DyeColor;
 import thut.api.ThutCaps;
+import thut.api.entity.IAnimated.IAnimationHolder;
 import thut.api.entity.IMobColourable;
 import thut.api.entity.IShearable;
 import thut.api.entity.ShearableCaps;
-import thut.core.client.render.animation.CapabilityAnimation.IAnimationHolder;
+import thut.api.entity.animation.Animation;
 
 public class AnimationChanger implements IAnimationChanger
 {
@@ -116,7 +117,7 @@ public class AnimationChanger implements IAnimationChanger
             final Function<Integer, Integer> offset = this.colourOffsets.get(partIdentifier);
             int colour = pokemob.getDyeColour() & 15;
             if (offset != null) colour = offset.apply(colour);
-            rgba += DyeColor.byId(colour).textColor;
+            rgba += DyeColor.byId(colour).getTextColor();
             return rgba;
         }
         final int[] arr = pokemob.getRGBA();

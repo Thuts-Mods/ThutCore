@@ -2,18 +2,18 @@ package thut.core.common.terrain;
 
 import java.util.Collection;
 
-import net.minecraft.entity.Entity;
-import net.minecraft.entity.LivingEntity;
-import net.minecraft.util.Direction;
-import net.minecraft.util.ResourceLocation;
+import net.minecraft.core.Direction;
+import net.minecraft.resources.ResourceLocation;
+import net.minecraft.world.entity.Entity;
+import net.minecraft.world.entity.LivingEntity;
 import net.minecraftforge.common.MinecraftForge;
 import net.minecraftforge.common.capabilities.Capability;
-import net.minecraftforge.common.capabilities.CapabilityInject;
 import net.minecraftforge.common.capabilities.ICapabilityProvider;
 import net.minecraftforge.common.util.LazyOptional;
 import net.minecraftforge.event.AttachCapabilitiesEvent;
 import net.minecraftforge.event.entity.living.LivingEvent.LivingUpdateEvent;
-import net.minecraftforge.eventbus.api.SubscribeEvent;
+import thut.api.ThutCaps;
+import thut.api.terrain.ITerrainAffected;
 import thut.api.terrain.TerrainEffectEvent;
 import thut.api.terrain.TerrainManager;
 import thut.api.terrain.TerrainSegment;
@@ -30,7 +30,7 @@ public class CapabilityTerrainAffected
         private Collection<ITerrainEffect>           effects;
 
         @Override
-        public void attach(LivingEntity mob)
+        public void attach(final LivingEntity mob)
         {
             this.theMob = mob;
         }
@@ -42,12 +42,12 @@ public class CapabilityTerrainAffected
         }
 
         @Override
-        public <T> LazyOptional<T> getCapability(Capability<T> capability, Direction facing)
+        public <T> LazyOptional<T> getCapability(final Capability<T> capability, final Direction facing)
         {
-            return CapabilityTerrainAffected.TERRAIN_CAP.orEmpty(capability, this.holder);
+            return ThutCaps.TERRAIN_AFFECTED.orEmpty(capability, this.holder);
         }
 
-        public void onTerrainEntry(TerrainSegment entered)
+        public void onTerrainEntry(final TerrainSegment entered)
         {
             if (entered == this.terrain || this.theMob == null) return;
             this.terrain = entered;
@@ -80,35 +80,21 @@ public class CapabilityTerrainAffected
 
     }
 
-    public static interface ITerrainAffected
+    private static final ResourceLocation TERRAINEFFECTCAP = new ResourceLocation(ThutCore.MODID, "terrain_effects");
+
+    public static void init()
     {
-        void attach(LivingEntity mob);
-
-        LivingEntity getAttached();
-
-        void onTerrainTick();
+        MinecraftForge.EVENT_BUS.addListener(CapabilityTerrainAffected::EntityUpdate);
+        MinecraftForge.EVENT_BUS.addGenericListener(Entity.class, CapabilityTerrainAffected::onEntityCapabilityAttach);
     }
 
-    private static final ResourceLocation TERRAINEFFECTCAP = new ResourceLocation(ThutCore.MODID, "terrainEffects");
-
-    @CapabilityInject(ITerrainAffected.class)
-    public static final Capability<ITerrainAffected> TERRAIN_CAP = null;
-
-    public CapabilityTerrainAffected()
+    private static void EntityUpdate(final LivingUpdateEvent evt)
     {
-        MinecraftForge.EVENT_BUS.register(this);
-    }
-
-    @SubscribeEvent
-    public void EntityUpdate(LivingUpdateEvent evt)
-    {
-        final ITerrainAffected effects = evt.getEntity().getCapability(CapabilityTerrainAffected.TERRAIN_CAP, null)
-                .orElse(null);
+        final ITerrainAffected effects = evt.getEntity().getCapability(ThutCaps.TERRAIN_AFFECTED, null).orElse(null);
         if (effects != null) effects.onTerrainTick();
     }
 
-    @SubscribeEvent
-    public void onEntityCapabilityAttach(AttachCapabilitiesEvent<Entity> event)
+    private static void onEntityCapabilityAttach(final AttachCapabilitiesEvent<Entity> event)
     {
         if (!(event.getObject() instanceof LivingEntity) || event.getCapabilities().containsKey(
                 CapabilityTerrainAffected.TERRAINEFFECTCAP)) return;

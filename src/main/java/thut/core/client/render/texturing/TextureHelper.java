@@ -9,10 +9,11 @@ import java.util.Set;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 
-import net.minecraft.entity.LivingEntity;
-import net.minecraft.util.ResourceLocation;
+import net.minecraft.resources.ResourceLocation;
+import net.minecraft.world.entity.LivingEntity;
 import net.minecraftforge.common.capabilities.Capability;
-import net.minecraftforge.common.capabilities.CapabilityInject;
+import net.minecraftforge.common.capabilities.CapabilityManager;
+import net.minecraftforge.common.capabilities.CapabilityToken;
 import net.minecraftforge.common.capabilities.ICapabilityProvider;
 import thut.api.entity.IMobTexturable;
 import thut.core.client.render.animation.AnimationXML.ColourTex;
@@ -62,7 +63,7 @@ public class TextureHelper implements IPartTexturer
             double dy = 0;
             toFill[0] = dx;
             toFill[1] = dy;
-            final Random random = ThutCore.newRandom();
+            final Random random = new Random(mob.getRandomSeed());
             final List<String> states = mob.getTextureStates();
             for (final String state : states)
                 if (this.infoStates.containsKey(state))
@@ -136,8 +137,7 @@ public class TextureHelper implements IPartTexturer
         }
     }
 
-    @CapabilityInject(IMobTexturable.class)
-    public static final Capability<IMobTexturable> CAPABILITY = null;
+    public static final Capability<IMobTexturable> CAPABILITY = CapabilityManager.get(new CapabilityToken<>(){});
 
     protected IMobTexturable         mob;
     /** Map of part/material name -> texture name */

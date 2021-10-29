@@ -6,17 +6,17 @@ import java.util.Set;
 
 import com.google.common.collect.Maps;
 
-import net.minecraft.block.Block;
-import net.minecraft.block.BlockState;
-import net.minecraft.entity.Entity;
-import net.minecraft.entity.EntityType;
-import net.minecraft.item.Item;
-import net.minecraft.item.ItemStack;
-import net.minecraft.item.Items;
+import net.minecraft.resources.ResourceLocation;
 import net.minecraft.tags.BlockTags;
 import net.minecraft.tags.EntityTypeTags;
 import net.minecraft.tags.ItemTags;
-import net.minecraft.util.ResourceLocation;
+import net.minecraft.world.entity.Entity;
+import net.minecraft.world.entity.EntityType;
+import net.minecraft.world.item.Item;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.Items;
+import net.minecraft.world.level.block.Block;
+import net.minecraft.world.level.block.state.BlockState;
 
 public class ItemList extends Items
 {
@@ -29,7 +29,7 @@ public class ItemList extends Items
         {
             final EntityType<?> type = (EntityType<?>) toCheck;
             final boolean tagged = EntityTypeTags.getAllTags().getTagOrEmpty(tag).contains(type);
-            if (!tagged) return type.getRegistryName().equals(tag);
+            if (!tagged && type.getRegistryName() != null) return type.getRegistryName().equals(tag);
             return tagged;
         }
         if (toCheck instanceof Item)
@@ -37,7 +37,7 @@ public class ItemList extends Items
             final Item item = (Item) toCheck;
             boolean tagged = ItemTags.getAllTags().getTagOrEmpty(tag).contains(item);
             tagged = tagged || ItemList.pendingTags.getOrDefault(tag, Collections.emptySet()).contains(item);
-            if (!tagged) return item.getRegistryName().equals(tag);
+            if (!tagged && item.getRegistryName() != null) return item.getRegistryName().equals(tag);
             return tagged;
         }
         else if (toCheck instanceof ItemStack) return ItemList.is(tag, ((ItemStack) toCheck).getItem());
@@ -46,7 +46,7 @@ public class ItemList extends Items
 
             final Block block = (Block) toCheck;
             final boolean tagged = BlockTags.getAllTags().getTagOrEmpty(tag).contains(block);
-            if (!tagged) return block.getRegistryName().equals(tag);
+            if (!tagged && block.getRegistryName() != null) return block.getRegistryName().equals(tag);
             return tagged;
         }
         else if (toCheck instanceof BlockState) return ItemList.is(tag, ((BlockState) toCheck).getBlock());

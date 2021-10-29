@@ -4,16 +4,18 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 
+import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
 
-import com.mojang.blaze3d.matrix.MatrixStack;
+import com.mojang.blaze3d.vertex.PoseStack;
 
-import net.minecraft.entity.Entity;
+import net.minecraft.world.entity.Entity;
 import thut.api.ModelHolder;
+import thut.api.entity.IAnimated.HeadInfo;
+import thut.api.entity.IAnimated.IAnimationHolder;
+import thut.api.entity.animation.Animation;
 import thut.api.maths.Vector3;
 import thut.api.maths.Vector4;
-import thut.core.client.render.animation.Animation;
-import thut.core.client.render.animation.CapabilityAnimation.IAnimationHolder;
 import thut.core.client.render.animation.IAnimationChanger;
 import thut.core.client.render.texturing.IPartTexturer;
 
@@ -84,7 +86,7 @@ public interface IModelRenderer<T extends Entity>
 
     boolean hasAnimation(String phase, Entity entity);
 
-    void scaleEntity(MatrixStack mat, Entity entity, IModel model, float partialTick);
+    void scaleEntity(PoseStack mat, Entity entity, IModel model, float partialTick);
 
     default void setAnimation(final Entity entity, final float partialTick)
     {
@@ -103,6 +105,15 @@ public interface IModelRenderer<T extends Entity>
     void setAnimationHolder(IAnimationHolder holder);
 
     IAnimationHolder getAnimationHolder();
+
+    /**
+     * This one is only used to store the axis/limits/offsets. For actual
+     * rendering, use the one from getAnimationHolder!
+     *
+     * @return a dummy HeadInfo for loading limits into
+     */
+    @Nonnull
+    HeadInfo getHeadInfo();
 
     void setAnimationChanger(IAnimationChanger changer);
 

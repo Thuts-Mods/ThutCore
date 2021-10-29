@@ -16,9 +16,11 @@ import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 
 import net.minecraft.client.Minecraft;
-import net.minecraft.resources.IResource;
-import net.minecraft.util.ResourceLocation;
+import net.minecraft.resources.ResourceLocation;
+import net.minecraft.server.packs.resources.Resource;
 import thut.api.ModelHolder;
+import thut.api.entity.IAnimated.IAnimationHolder;
+import thut.api.entity.animation.Animation;
 import thut.api.maths.Vector3;
 import thut.api.maths.Vector4;
 import thut.core.client.render.animation.AnimationXML.Mat;
@@ -27,7 +29,6 @@ import thut.core.client.render.animation.AnimationXML.Metadata;
 import thut.core.client.render.animation.AnimationXML.Phase;
 import thut.core.client.render.animation.AnimationXML.Worn;
 import thut.core.client.render.animation.AnimationXML.XMLFile;
-import thut.core.client.render.animation.CapabilityAnimation.IAnimationHolder;
 import thut.core.client.render.animation.IAnimationChanger.WornOffsets;
 import thut.core.client.render.model.IModel;
 import thut.core.client.render.model.IModelRenderer;
@@ -274,18 +275,15 @@ public class AnimationLoader
             loaded.setAnimationChanger(animator);
 
             // Process the head rotation information.
-            if (model.getHeadInfo() != null)
-            {
-                if (headDir2 == 2) headDir2 = headDir;
-                if (headDir != 2) model.getHeadInfo().yawDirection = headDir;
-                if (headDir2 != 2) model.getHeadInfo().pitchDirection = headDir2;
-                model.getHeadInfo().yawAxis = headAxis;
-                model.getHeadInfo().pitchAxis = headAxis2;
-                model.getHeadInfo().yawCapMin = headCaps[0];
-                model.getHeadInfo().yawCapMax = headCaps[1];
-                model.getHeadInfo().pitchCapMin = headCaps1[0];
-                model.getHeadInfo().pitchCapMax = headCaps1[1];
-            }
+            if (headDir2 == 2) headDir2 = headDir;
+            if (headDir != 2) loaded.getHeadInfo().yawDirection = headDir;
+            if (headDir2 != 2) loaded.getHeadInfo().pitchDirection = headDir2;
+            loaded.getHeadInfo().yawAxis = headAxis;
+            loaded.getHeadInfo().pitchAxis = headAxis2;
+            loaded.getHeadInfo().yawCapMin = headCaps[0];
+            loaded.getHeadInfo().yawCapMax = headCaps[1];
+            loaded.getHeadInfo().pitchCapMin = headCaps1[0];
+            loaded.getHeadInfo().pitchCapMax = headCaps1[1];
 
             // Pre-process the animations via the model
             model.preProcessAnimations(allAnims);
@@ -303,7 +301,7 @@ public class AnimationLoader
     {
         try
         {
-            final IResource res = Minecraft.getInstance().getResourceManager().getResource(animations);
+            final Resource res = Minecraft.getInstance().getResourceManager().getResource(animations);
             final InputStream stream = res.getInputStream();
             if (ThutCore.conf.debug) ThutCore.LOGGER.debug("Loading " + animations + " for " + holder.name);
             AnimationLoader.parse(stream, holder, model, renderer);

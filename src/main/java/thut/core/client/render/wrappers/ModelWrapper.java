@@ -7,28 +7,29 @@ import java.util.Map;
 import java.util.Set;
 
 import com.google.common.collect.Sets;
-import com.mojang.blaze3d.matrix.MatrixStack;
-import com.mojang.blaze3d.vertex.IVertexBuilder;
+import com.mojang.blaze3d.vertex.PoseStack;
+import com.mojang.blaze3d.vertex.VertexConsumer;
+import com.mojang.math.Quaternion;
+import com.mojang.math.Vector3f;
 
 import net.minecraft.client.Minecraft;
-import net.minecraft.client.renderer.IRenderTypeBuffer;
-import net.minecraft.client.renderer.entity.model.EntityModel;
-import net.minecraft.entity.Entity;
-import net.minecraft.util.ResourceLocation;
-import net.minecraft.util.math.vector.Quaternion;
-import net.minecraft.util.math.vector.Vector3f;
+import net.minecraft.client.model.EntityModel;
+import net.minecraft.client.renderer.MultiBufferSource;
+import net.minecraft.resources.ResourceLocation;
+import net.minecraft.world.entity.Entity;
 import net.minecraftforge.api.distmarker.Dist;
 import net.minecraftforge.client.event.TextureStitchEvent;
 import net.minecraftforge.eventbus.api.SubscribeEvent;
 import net.minecraftforge.fml.common.Mod;
 import thut.api.ModelHolder;
+import thut.api.entity.IAnimated.HeadInfo;
+import thut.api.entity.IAnimated.IAnimationHolder;
 import thut.api.entity.IMobColourable;
+import thut.api.entity.animation.Animation;
 import thut.api.maths.Vector3;
 import thut.api.maths.Vector4;
-import thut.core.client.render.animation.Animation;
 import thut.core.client.render.animation.AnimationHelper;
 import thut.core.client.render.animation.AnimationXML.Mat;
-import thut.core.client.render.animation.CapabilityAnimation.IAnimationHolder;
 import thut.core.client.render.animation.IAnimationChanger;
 import thut.core.client.render.model.IExtendedModelPart;
 import thut.core.client.render.model.IModel;
@@ -43,8 +44,6 @@ import thut.core.common.mobs.DefaultColourable;
 @Mod.EventBusSubscriber(bus = Mod.EventBusSubscriber.Bus.MOD, modid = ThutCore.MODID, value = Dist.CLIENT)
 public class ModelWrapper<T extends Entity> extends EntityModel<T> implements IModel
 {
-    private static final HeadInfo DUMMY = new HeadInfo();
-
     private static final Set<ModelWrapper<?>> WRAPPERS = Sets.newHashSet();
 
     @SubscribeEvent
@@ -59,6 +58,8 @@ public class ModelWrapper<T extends Entity> extends EntityModel<T> implements IM
     private T                      entityIn;
     protected float                rotationPointX = 0, rotationPointY = 0, rotationPointZ = 0;
     protected float                rotateAngleX   = 0, rotateAngleY = 0, rotateAngleZ = 0, rotateAngle = 0;
+
+    public long lastInit = -1;
 
     private final int[] tmp = new int[4];
 
@@ -83,13 +84,6 @@ public class ModelWrapper<T extends Entity> extends EntityModel<T> implements IM
     {
         if (!this.isLoaded()) return;
         this.imodel.applyAnimation(entity, renderer, partialTicks, limbSwing);
-    }
-
-    @Override
-    public HeadInfo getHeadInfo()
-    {
-        if (this.imodel == null) return ModelWrapper.DUMMY;
-        return this.imodel.getHeadInfo();
     }
 
     @Override
@@ -165,13 +159,13 @@ public class ModelWrapper<T extends Entity> extends EntityModel<T> implements IM
     {
         if (!this.isLoaded()) return;
         this.entityIn = entityIn;
-        final HeadInfo info = this.imodel.getHeadInfo();
-        if (info != null)
+        final HeadInfo info = this.renderer.getAnimationHolder().getHeadInfo();
+        if (!info.fixed)
         {
             info.headPitch = headPitch;
             info.headYaw = netHeadYaw;
         }
-        if (info != null) info.currentTick = entityIn.tickCount;
+        info.currentTick = entityIn.tickCount;
         final IAnimationChanger animChanger = this.renderer.getAnimationChanger();
         final Set<String> excluded = Sets.newHashSet();
         if (animChanger != null) for (final String partName : this.imodel.getParts().keySet())
@@ -183,7 +177,7 @@ public class ModelWrapper<T extends Entity> extends EntityModel<T> implements IM
     }
 
     @Override
-    public void renderToBuffer(final MatrixStack mat, final IVertexBuilder buffer, final int packedLightIn,
+    public void renderToBuffer(final PoseStack mat, final VertexConsumer buffer, final int packedLightIn,
             final int packedOverlayIn, final float red, final float green, final float blue, final float alpha)
     {
         if (this.imodel == null) this.imodel = ModelFactory.create(this.model);
@@ -225,13 +219,13 @@ public class ModelWrapper<T extends Entity> extends EntityModel<T> implements IM
         mat.popPose();
     }
 
-    protected void rotate(final MatrixStack mat)
+    protected void rotate(final PoseStack mat)
     {
         final Vector3f axis = new Vector3f(this.rotateAngleX, this.rotateAngleY, this.rotateAngleZ);
         mat.mulPose(new Quaternion(axis, this.rotateAngle, true));
     }
 
-    public void setMob(final T entity, final IRenderTypeBuffer bufferIn, final ResourceLocation default_)
+    public void setMob(final T entity, final MultiBufferSource bufferIn, final ResourceLocation default_)
     {
         final IPartTexturer texer = this.renderer.getTexturer();
         if (texer != null)
@@ -287,7 +281,7 @@ public class ModelWrapper<T extends Entity> extends EntityModel<T> implements IM
         this.rotationPointZ = par3;
     }
 
-    protected void transformGlobal(final MatrixStack mat, final IVertexBuilder buffer, final String currentPhase,
+    protected void transformGlobal(final PoseStack mat, final VertexConsumer buffer, final String currentPhase,
             final Entity entity, final float partialTick)
     {
         Vector5 rotations = this.renderer.getRotations();
@@ -300,7 +294,7 @@ public class ModelWrapper<T extends Entity> extends EntityModel<T> implements IM
         this.renderer.scaleEntity(mat, entity, this, partialTick);
     }
 
-    private void translate(final MatrixStack mat)
+    private void translate(final PoseStack mat)
     {
         mat.translate(this.rotationPointX, this.rotationPointY, this.rotationPointZ);
     }

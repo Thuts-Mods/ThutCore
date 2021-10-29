@@ -1,93 +1,138 @@
-package thut.crafts.proxy;
+package thut.core.init;
 
 import java.util.List;
+import java.util.Locale;
 
 import org.apache.commons.lang3.tuple.Pair;
 
 import com.google.common.collect.Lists;
-import com.mojang.blaze3d.platform.InputConstants;
 import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.blaze3d.vertex.VertexConsumer;
 import com.mojang.math.Matrix4f;
 import com.mojang.math.Vector3f;
 
-import net.minecraft.client.KeyMapping;
 import net.minecraft.client.Minecraft;
+import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.client.renderer.MultiBufferSource;
 import net.minecraft.client.renderer.RenderType;
+import net.minecraft.client.resources.language.I18n;
 import net.minecraft.core.BlockPos;
-import net.minecraft.world.entity.Entity;
+import net.minecraft.resources.ResourceKey;
+import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.level.biome.Biome;
 import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.BlockHitResult;
 import net.minecraft.world.phys.HitResult.Type;
 import net.minecraft.world.phys.Vec3;
 import net.minecraftforge.api.distmarker.Dist;
-import net.minecraftforge.client.event.EntityRenderersEvent.RegisterRenderers;
+import net.minecraftforge.client.event.RenderGameOverlayEvent;
+import net.minecraftforge.client.event.RenderHandEvent;
+import net.minecraftforge.client.event.RenderLivingEvent;
 import net.minecraftforge.client.event.RenderWorldLastEvent;
-import net.minecraftforge.client.settings.KeyConflictContext;
-import net.minecraftforge.event.TickEvent;
-import net.minecraftforge.event.TickEvent.Phase;
+import net.minecraftforge.common.BiomeDictionary;
+import net.minecraftforge.event.world.WorldEvent.Load;
+import net.minecraftforge.eventbus.api.EventPriority;
 import net.minecraftforge.eventbus.api.SubscribeEvent;
 import net.minecraftforge.fml.common.Mod;
-import net.minecraftforge.fml.common.Mod.EventBusSubscriber.Bus;
-import net.minecraftforge.fml.event.lifecycle.FMLClientSetupEvent;
-import net.minecraftforge.fmlclient.registry.ClientRegistry;
-import thut.api.entity.blockentity.render.RenderBlockEntity;
+import thut.api.entity.CopyCaps;
+import thut.api.entity.ICopyMob;
 import thut.api.maths.Vector3;
-import thut.crafts.Reference;
-import thut.crafts.ThutCrafts;
-import thut.crafts.entity.CraftController;
-import thut.crafts.entity.EntityCraft;
-import thut.crafts.network.PacketCraftControl;
+import thut.api.particle.ThutParticles;
+import thut.api.terrain.BiomeDatabase;
+import thut.api.terrain.BiomeType;
+import thut.api.terrain.TerrainManager;
+import thut.api.terrain.TerrainSegment;
+import thut.core.client.render.particle.ParticleFactories;
 
-@Mod.EventBusSubscriber(bus = Bus.FORGE, value = Dist.CLIENT)
-public class ClientProxy
+@Mod.EventBusSubscriber(bus = Mod.EventBusSubscriber.Bus.FORGE, value = Dist.CLIENT)
+public class ClientInit
 {
-    static KeyMapping UP;
-    static KeyMapping DOWN;
-    static KeyMapping ROTATERIGHT;
-    static KeyMapping ROTATELEFT;
-
-    @Mod.EventBusSubscriber(bus = Mod.EventBusSubscriber.Bus.MOD, modid = Reference.MODID, value = Dist.CLIENT)
-    public static class RegistryEvents
+    public static void line(final VertexConsumer builder, final Matrix4f positionMatrix, final float dx1,
+            final float dy1, final float dz1, final float dx2, final float dy2, final float dz2, final float r,
+            final float g, final float b, final float a)
     {
-        @SubscribeEvent
-        public static void registerRenderers(final RegisterRenderers event)
-        {
-            event.registerEntityRenderer(EntityCraft.CRAFTTYPE, RenderBlockEntity::new);
-        }
+        builder.vertex(positionMatrix, dx1, dy1, dz1).color(r, g, b, a).endVertex();
+        builder.vertex(positionMatrix, dx2, dy2, dz2).color(r, g, b, a).endVertex();
+    }
+
+    public static void line(final VertexConsumer builder, final Matrix4f positionMatrix, final Vector3f start,
+            final Vector3f end, final float r, final float g, final float b, final float a)
+    {
+        ClientInit.line(builder, positionMatrix, start.x(), start.y(), start.z(), end.x(), end.y(), end.z(), r, g, b,
+                a);
+    }
+
+    private static boolean initParticles = false;
+
+    @SubscribeEvent
+    public static void startup(final Load event)
+    {
+        if (ClientInit.initParticles) return;
+        ClientInit.initParticles = true;
+        Minecraft.getInstance().particleEngine.register(ThutParticles.AURORA, ParticleFactories.GENERICFACTORY);
+        Minecraft.getInstance().particleEngine.register(ThutParticles.MISC, ParticleFactories.GENERICFACTORY);
+        Minecraft.getInstance().particleEngine.register(ThutParticles.STRING, ParticleFactories.GENERICFACTORY);
+        Minecraft.getInstance().particleEngine.register(ThutParticles.LEAF, ParticleFactories.GENERICFACTORY);
+        Minecraft.getInstance().particleEngine.register(ThutParticles.POWDER, ParticleFactories.GENERICFACTORY);
     }
 
     @SubscribeEvent
-    public static void clientTick(final TickEvent.PlayerTickEvent event)
+    public static void textOverlay(final RenderGameOverlayEvent.Text event)
     {
-        if (event.phase == Phase.START || event.player != Minecraft.getInstance().player) return;
-        control:
-        if (event.player.isPassenger() && Minecraft.getInstance().screen == null)
-        {
-            final Entity e = event.player.getVehicle();
-            if (e instanceof EntityCraft)
-            {
-                final net.minecraft.client.player.LocalPlayer player = (net.minecraft.client.player.LocalPlayer) event.player;
-                final CraftController controller = ((EntityCraft) e).controller;
-                if (controller == null) break control;
-                controller.backInputDown = player.input.down;
-                controller.forwardInputDown = player.input.up;
-                controller.leftInputDown = player.input.left;
-                controller.rightInputDown = player.input.right;
-                controller.upInputDown = ClientProxy.UP.isDown();
-                controller.downInputDown = ClientProxy.DOWN.isDown();
+        final boolean debug = Minecraft.getInstance().options.renderDebug;
+        if (!debug) return;
+        final TerrainSegment t = TerrainManager.getInstance().getTerrainForEntity(Minecraft.getInstance().player);
+        final Vector3 v = Vector3.getNewVector().set(Minecraft.getInstance().player);
+        final BiomeType type = t.getBiome(v);
+        final String msg = "Sub-Biome: " + I18n.get(type.readableName) + " (" + type.name + ")";
+        event.getLeft().add("");
+        event.getLeft().add(msg);
 
-                if (ThutCrafts.conf.canRotate)
-                {
-                    controller.rightRotateDown = ClientProxy.ROTATERIGHT.isDown();
-                    controller.leftRotateDown = ClientProxy.ROTATELEFT.isDown();
-                }
-                PacketCraftControl.sendControlPacket(e, controller);
-            }
+        if (Screen.hasAltDown())
+        {
+            event.getLeft().add("");
+            final Biome b = v.getBiome(Minecraft.getInstance().level);
+            final ResourceKey<Biome> key = BiomeDatabase.getKey(b);
+            event.getLeft().add(key.location() + ": " + BiomeDictionary.getTypes(key) + ", " + b.getBiomeCategory());
         }
+    }
+
+    static BiomeType getSubbiome(final ItemStack held)
+    {
+        if (held.getHoverName().getString().toLowerCase(Locale.ROOT).startsWith("subbiome->"))
+        {
+            final String[] args = held.getHoverName().getString().split("->");
+            if (args.length != 2) return null;
+            return BiomeType.getBiome(args[1].trim());
+        }
+        return null;
+    }
+
+    @SubscribeEvent(priority = EventPriority.HIGHEST)
+    public static void renderMob(final RenderLivingEvent.Pre<?, ?> event)
+    {
+        final LivingEntity living = event.getEntity();
+        final ICopyMob copied = CopyCaps.get(living);
+        if (copied != null && copied.getCopiedMob() != null)
+        {
+            final LivingEntity entity = copied.getCopiedMob();
+            final boolean backup = event.getRenderer().entityRenderDispatcher.camera.isInitialized();
+            event.getRenderer().entityRenderDispatcher.setRenderShadow(false);
+            event.getRenderer().entityRenderDispatcher.render(entity, 0, 0, 0, 0, event.getPartialRenderTick(), event
+                    .getMatrixStack(), event.getBuffers(), event.getLight());
+            event.getRenderer().entityRenderDispatcher.setRenderShadow(backup);
+            event.setCanceled(true);
+        }
+    }
+
+    @SubscribeEvent(priority = EventPriority.HIGHEST)
+    public static void renderHand(final RenderHandEvent event)
+    {
+        final Player player = Minecraft.getInstance().player;
+        final ICopyMob copied = CopyCaps.get(player);
+        if (copied != null && copied.getCopiedMob() != null) event.setCanceled(true);
     }
 
     @SubscribeEvent
@@ -97,7 +142,7 @@ public class ClientProxy
         final Player player = Minecraft.getInstance().player;
         if (!(held = player.getMainHandItem()).isEmpty() || !(held = player.getOffhandItem()).isEmpty())
         {
-            if (held.getItem() != ThutCrafts.CRAFTMAKER) return;
+            if (ClientInit.getSubbiome(held) == null) return;
             if (held.getTag() != null && held.getTag().contains("min"))
             {
                 final Minecraft mc = Minecraft.getInstance();
@@ -162,31 +207,9 @@ public class ClientProxy
                 final MultiBufferSource.BufferSource buffer = Minecraft.getInstance().renderBuffers().bufferSource();
                 final VertexConsumer builder = buffer.getBuffer(RenderType.LINES);
                 for (final Pair<Vector3f, Vector3f> line : lines)
-                    thut.core.init.ClientInit.line(builder, positionMatrix, line.getLeft(), line.getRight(), 1, 0, 0,
-                            1f);
+                    ClientInit.line(builder, positionMatrix, line.getLeft(), line.getRight(), 1, 0, 0, 1f);
                 mat.popPose();
             }
         }
-    }
-
-    @SubscribeEvent
-    public static void setupClient(final FMLClientSetupEvent event)
-    {
-        ClientProxy.UP = new KeyMapping("crafts.key.up", InputConstants.UNKNOWN.getValue(), "keys.crafts");
-        ClientProxy.DOWN = new KeyMapping("crafts.key.down", InputConstants.UNKNOWN.getValue(), "keys.crafts");
-
-        final KeyConflictContext inGame = KeyConflictContext.IN_GAME;
-        ClientProxy.UP.setKeyConflictContext(inGame);
-        ClientProxy.DOWN.setKeyConflictContext(inGame);
-
-        ClientProxy.ROTATERIGHT = new KeyMapping("crafts.key.left", InputConstants.UNKNOWN.getValue(), "keys.crafts");
-        ClientProxy.ROTATELEFT = new KeyMapping("crafts.key.right", InputConstants.UNKNOWN.getValue(), "keys.crafts");
-        ClientProxy.ROTATELEFT.setKeyConflictContext(inGame);
-        ClientProxy.ROTATERIGHT.setKeyConflictContext(inGame);
-
-        ClientRegistry.registerKeyBinding(ClientProxy.UP);
-        ClientRegistry.registerKeyBinding(ClientProxy.DOWN);
-        ClientRegistry.registerKeyBinding(ClientProxy.ROTATELEFT);
-        ClientRegistry.registerKeyBinding(ClientProxy.ROTATERIGHT);
     }
 }
