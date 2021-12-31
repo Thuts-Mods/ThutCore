@@ -21,7 +21,6 @@ import thut.core.common.config.Config.ConfigData;
 import thut.core.common.config.Configure;
 import thut.core.common.network.PacketHandler;
 import thut.crafts.entity.EntityCraft;
-import thut.crafts.entity.EntityTest;
 import thut.crafts.network.PacketCraftControl;
 
 @Mod(Reference.MODID)
@@ -56,8 +55,8 @@ public class ThutCrafts
             // register a new mob here
             EntityCraft.CRAFTTYPE.setRegistryName(Reference.MODID, "craft");
             event.getRegistry().register(EntityCraft.CRAFTTYPE);
-            EntityTest.TYPE.setRegistryName(Reference.MODID, "testmob");
-            event.getRegistry().register(EntityTest.TYPE);
+//            EntityTest.TYPE.setRegistryName(Reference.MODID, "testmob");
+//            event.getRegistry().register(EntityTest.TYPE);
         }
 
         @SubscribeEvent
