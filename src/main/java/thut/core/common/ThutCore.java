@@ -24,7 +24,6 @@ import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.EntityHitResult;
-// The value here should match an entry in the META-INF/mods.toml file
 import net.minecraft.world.phys.HitResult;
 import net.minecraft.world.phys.Vec3;
 import net.minecraftforge.common.MinecraftForge;
@@ -32,6 +31,7 @@ import net.minecraftforge.common.capabilities.RegisterCapabilitiesEvent;
 import net.minecraftforge.event.AttachCapabilitiesEvent;
 import net.minecraftforge.event.RegistryEvent;
 import net.minecraftforge.event.entity.player.PlayerInteractEvent.RightClickBlock;
+import net.minecraftforge.event.server.ServerAboutToStartEvent;
 import net.minecraftforge.eventbus.api.SubscribeEvent;
 import net.minecraftforge.fml.DistExecutor;
 import net.minecraftforge.fml.common.Mod;
@@ -39,7 +39,6 @@ import net.minecraftforge.fml.event.lifecycle.FMLClientSetupEvent;
 import net.minecraftforge.fml.event.lifecycle.FMLCommonSetupEvent;
 import net.minecraftforge.fml.javafmlmod.FMLJavaModLoadingContext;
 import net.minecraftforge.fml.loading.FMLPaths;
-import net.minecraftforge.fmlserverevents.FMLServerAboutToStartEvent;
 import thut.api.AnimatedCaps;
 import thut.api.LinkableCaps;
 import thut.api.ThutCaps;
@@ -59,6 +58,7 @@ import thut.core.common.network.CapabilitySync;
 import thut.core.common.network.EntityUpdate;
 import thut.core.common.network.GeneralUpdate;
 import thut.core.common.network.PacketHandler;
+import thut.core.common.network.PacketPartInteract;
 import thut.core.common.network.TerrainUpdate;
 import thut.core.common.network.TileUpdate;
 import thut.core.common.terrain.CapabilityTerrainAffected;
@@ -108,8 +108,8 @@ public class ThutCore
                 {
                     final Vec3 vector3d1 = optional.get();
                     final double d1 = startVec.distanceToSqr(vector3d1);
-                    if (d1 < d0 || d0 == 0.0D) if (entity1.getRootVehicle() == shooter.getRootVehicle() && !entity1
-                            .canRiderInteract())
+                    if (d1 < d0 || d0 == 0.0D)
+                        if (entity1.getRootVehicle() == shooter.getRootVehicle() && !entity1.canRiderInteract())
                     {
                         if (d0 == 0.0D)
                         {
@@ -143,8 +143,8 @@ public class ThutCore
                 if (var != null && var.getType() == HitResult.Type.ENTITY)
                 {
                     final IBlockEntity entity = (IBlockEntity) var.getEntity();
-                    if (entity.getInteractor().processInitialInteract(event.getPlayer(), event.getItemStack(), event
-                            .getHand()) != InteractionResult.PASS)
+                    if (entity.getInteractor().processInitialInteract(event.getPlayer(), event.getItemStack(),
+                            event.getHand()) != InteractionResult.PASS)
                     {
                         event.setCanceled(true);
                         return;
@@ -186,9 +186,9 @@ public class ThutCore
 
     // Directly reference a log4j logger.
     public static final Logger LOGGER = LogManager.getLogger(ThutCore.MODID);
-    public static final String MODID  = "thutcore";
+    public static final String MODID = "thutcore";
 
-    private static final String NETVERSION = "1.0.0";
+    private static final String NETVERSION = "1.1.0";
 
     public static final PacketHandler packets = new PacketHandler(new ResourceLocation(ThutCore.MODID, "comms"),
             ThutCore.NETVERSION);
@@ -240,8 +240,8 @@ public class ThutCore
         final File logfile = FMLPaths.GAMEDIR.get().resolve("logs").resolve(ThutCore.MODID + ".log").toFile();
         if (logfile.exists()) logfile.delete();
         final org.apache.logging.log4j.core.Logger logger = (org.apache.logging.log4j.core.Logger) ThutCore.LOGGER;
-        final FileAppender appender = FileAppender.newBuilder().withFileName(logfile.getAbsolutePath()).setName(
-                ThutCore.MODID).build();
+        final FileAppender appender = FileAppender.newBuilder().withFileName(logfile.getAbsolutePath())
+                .setName(ThutCore.MODID).build();
         logger.addAppender(appender);
         appender.start();
 
@@ -267,7 +267,7 @@ public class ThutCore
 
     // You can use SubscribeEvent and let the Event Bus discover methods to call
     @SubscribeEvent
-    public void onServerAboutToStart(final FMLServerAboutToStartEvent event)
+    public void onServerAboutToStart(final ServerAboutToStartEvent event)
     {
         // do something when the server starts
         ThutCore.LOGGER.debug("Clearing terrain cache");
@@ -287,6 +287,7 @@ public class ThutCore
         ThutCore.packets.registerMessage(PacketDataSync.class, PacketDataSync::new);
         ThutCore.packets.registerMessage(GeneralUpdate.class, GeneralUpdate::new);
         ThutCore.packets.registerMessage(CapabilitySync.class, CapabilitySync::new);
+        ThutCore.packets.registerMessage(PacketPartInteract.class, PacketPartInteract::new);
 
         GeneralUpdate.init();
         CapabilitySync.init();
@@ -303,13 +304,17 @@ public class ThutCore
 
         ThutCore.proxy.setup(event);
 
-        event.enqueueWork(() ->
-        {
+        event.enqueueWork(() -> {
             // Register the mob serializers
             // for seats
             EntityDataSerializers.registerSerializer(IMultiplePassengerEntity.SEATSERIALIZER);
             // for Vec3ds
             EntityDataSerializers.registerSerializer(BlockEntityBase.VEC3DSER);
         });
+    }
+
+    public static ConfigHandler getConfig()
+    {
+        return conf;
     }
 }

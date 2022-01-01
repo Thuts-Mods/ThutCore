@@ -10,13 +10,13 @@ import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec3;
+import net.minecraftforge.entity.IEntityAdditionalSpawnData;
 import net.minecraftforge.event.entity.player.PlayerEvent.PlayerLoggedOutEvent;
 import net.minecraftforge.event.entity.player.PlayerEvent.StartTracking;
 import net.minecraftforge.event.entity.player.PlayerInteractEvent;
 import net.minecraftforge.eventbus.api.SubscribeEvent;
 import net.minecraftforge.fml.common.Mod;
 import net.minecraftforge.fml.common.Mod.EventBusSubscriber.Bus;
-import net.minecraftforge.fmllegacy.common.registry.IEntityAdditionalSpawnData;
 import thut.api.Tracker;
 import thut.api.entity.blockentity.BlockEntityBase;
 import thut.api.entity.blockentity.IBlockEntity;
@@ -49,7 +49,7 @@ public class CommonInit
             min = min.subtract(mid);
             max = max.subtract(mid);
             final int dw = Math.max(max.getX() - min.getX(), max.getZ() - min.getZ());
-            if (max.getY() - min.getY() > 10 || dw > 2 * 5 + 1)
+            if (max.getY() - min.getY() > 30 || dw > 2 * 20 + 1)
             {
                 final String message = "msg.craft.toobig";
                 if (!worldIn.isClientSide) playerIn.sendMessage(new TranslatableComponent(message), Util.NIL_UUID);
@@ -103,7 +103,7 @@ public class CommonInit
             min = min.subtract(mid);
             max = max.subtract(mid);
             final int dw = Math.max(max.getX() - min.getX(), max.getZ() - min.getZ());
-            if (max.getY() - min.getY() > 15 || dw > 2 * 10 + 1)
+            if (max.getY() - min.getY() > 30 || dw > 2 * 20 + 1)
             {
                 final String message = "msg.craft.toobig";
                 if (!worldIn.isClientSide) playerIn.sendMessage(new TranslatableComponent(message), Util.NIL_UUID);

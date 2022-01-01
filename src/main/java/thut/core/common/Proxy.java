@@ -7,10 +7,14 @@ import net.minecraftforge.fml.event.lifecycle.FMLClientSetupEvent;
 import net.minecraftforge.fml.event.lifecycle.FMLCommonSetupEvent;
 import net.minecraftforge.fml.event.lifecycle.FMLLoadCompleteEvent;
 import net.minecraftforge.fml.util.thread.EffectiveSide;
-import net.minecraftforge.fmllegacy.LogicalSidedProvider;
+import net.minecraftforge.server.ServerLifecycleHooks;
 
 public interface Proxy
 {
+    default MinecraftServer getServer()
+    {
+        return ServerLifecycleHooks.getCurrentServer();
+    }
 
     default boolean isClientSide()
     {
@@ -26,8 +30,7 @@ public interface Proxy
     {
         try
         {
-            final MinecraftServer server = LogicalSidedProvider.INSTANCE.get(LogicalSide.SERVER);
-            return server.registryAccess();
+            return this.getServer().registryAccess();
         }
         catch (final Exception e)
         {
