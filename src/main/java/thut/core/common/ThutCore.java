@@ -20,6 +20,7 @@ import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.InteractionResult;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.player.Player;
+import net.minecraft.world.inventory.MenuType;
 import net.minecraft.world.item.CreativeModeTab;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.Level;
@@ -53,6 +54,7 @@ import thut.api.entity.ShearableCaps;
 import thut.api.entity.blockentity.BlockEntityBase;
 import thut.api.entity.blockentity.BlockEntityInventory;
 import thut.api.entity.blockentity.IBlockEntity;
+import thut.api.inventory.npc.NpcContainer;
 import thut.api.particle.ThutParticles;
 import thut.api.terrain.StructureManager;
 import thut.core.common.config.Config;
@@ -185,6 +187,12 @@ public class ThutCore
             event.getRegistry().register(ThutParticles.STRING.setRegistryName(ThutCore.MODID, "string"));
             event.getRegistry().register(ThutParticles.POWDER.setRegistryName(ThutCore.MODID, "powder"));
         }
+        
+        @SubscribeEvent
+        public static void registerContainers(final RegistryEvent.Register<MenuType<?>> event)
+        {
+            event.getRegistry().register(NpcContainer.TYPE.setRegistryName(ThutCore.MODID, "npc"));
+        }
 
         public static void registerLootFunction()
         {
@@ -268,6 +276,9 @@ public class ThutCore
 
         // Register Config stuff
         Config.setupConfigs(ThutCore.conf, ThutCore.MODID, ThutCore.MODID);
+
+        // Do the loot functions here, since that isn't a forge registry
+        RegistryEvents.registerLootFunction();
     }
 
     private void doClientStuff(final FMLClientSetupEvent event)
@@ -320,9 +331,6 @@ public class ThutCore
             EntityDataSerializers.registerSerializer(IMultiplePassengerEntity.SEATSERIALIZER);
             // for Vec3ds
             EntityDataSerializers.registerSerializer(BlockEntityBase.VEC3DSER);
-
-            // Do the loot functions here, since that isn't a forge registry
-            RegistryEvents.registerLootFunction();
         });
     }
 
