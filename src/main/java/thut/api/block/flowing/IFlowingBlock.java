@@ -6,7 +6,6 @@ import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerLevel;
-import net.minecraft.world.level.ChunkPos;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.state.BlockState;
@@ -14,7 +13,6 @@ import net.minecraft.world.level.block.state.properties.BlockStateProperties;
 import net.minecraft.world.level.block.state.properties.BooleanProperty;
 import net.minecraft.world.level.block.state.properties.IntegerProperty;
 import net.minecraft.world.level.block.state.properties.Property;
-import net.minecraft.world.level.chunk.LevelChunk;
 import net.minecraft.world.level.material.FluidState;
 import net.minecraft.world.level.material.Fluids;
 import net.minecraft.world.phys.shapes.VoxelShape;
@@ -112,6 +110,8 @@ public interface IFlowingBlock
         {
             return b.setAmount(state, amt);
         }
+        if (amt == 0) return empty(state);;
+
         if (this.isFullBlock())
         {
             if (amt == 16) return thisBlock().defaultBlockState();
@@ -125,9 +125,14 @@ public interface IFlowingBlock
             b = copyValidTo(state, b);
             return b;
         }
-        // TODO check if it is waterlogged, if so, return water instead.
-        if (amt == 0) return Blocks.AIR.defaultBlockState();
         return state.setValue(LAYERS, amt);
+    }
+
+    default BlockState empty(BlockState state)
+    {
+        if (state.hasProperty(WATERLOGGED) && state.getValue(WATERLOGGED))
+            return Fluids.WATER.defaultFluidState().createLegacyBlock();
+        return Blocks.AIR.defaultBlockState();
     }
 
     default void onStableTick(BlockState state, ServerLevel level, BlockPos pos, Random random)
@@ -139,7 +144,7 @@ public interface IFlowingBlock
         }
     }
 
-    default boolean tryFall(BlockState state, ServerLevel level, BlockPos pos, Random random)
+    default BlockState tryFall(BlockState state, ServerLevel level, BlockPos pos, Random random)
     {
         boolean falling = isFalling(state);
 
@@ -151,13 +156,15 @@ public interface IFlowingBlock
         int below = getExistingAmount(b, belowPos, level);
         boolean belowFalling = isFalling(b);
 
-        if (falling)
+        if (falling || !state.hasProperty(FALLING))
         {
             if ((below < 0 || below == 16))
             {
-                if (!belowFalling) level.setBlock(pos, makeFalling(state, false), 2);
-                level.scheduleTick(pos.immutable(), thisBlock(), getFallRate());
-                return true;
+                if (!belowFalling)
+                {
+                    level.setBlock(pos, state = makeFalling(state, false), 2);
+                    return state;
+                }
             }
             else
             {
@@ -171,37 +178,35 @@ public interface IFlowingBlock
                     {
                         level.setBlock(belowPos, newBelow, 2);
                         level.scheduleTick(belowPos, newBelow.getBlock(), getFallRate());
-                        level.removeBlock(pos, false);
+                        level.setBlock(pos, state = setAmount(state, 0), 2);
+                        return state;
                     }
-                    else return false;
                 }
                 else if (dust - diff >= 0)
                 {
-                    BlockState b2 = getAlternate().defaultBlockState();
+                    BlockState b2 = setAmount(getAlternate().defaultBlockState(), 16);
                     b2 = copyValidTo(state, b2);
                     newBelow = getMergeResult(b2, b, belowPos, level);
                     if (newBelow != b)
                     {
                         level.setBlock(belowPos, newBelow, 2);
-                        level.setBlock(pos, setAmount(state, dust - diff), 2);
+                        level.setBlock(pos, state = setAmount(state, dust - diff), 2);
                         level.scheduleTick(pos.immutable(), thisBlock(), getFallRate());
                         level.scheduleTick(belowPos, newBelow.getBlock(), getFallRate());
+                        return state;
                     }
-                    else return false;
                 }
-                return true;
             }
         }
         if (below >= 0 && below < 16)
         {
-            level.setBlock(pos, makeFalling(state, true), 2);
+            level.setBlock(pos, state = makeFalling(state, true), 2);
             level.scheduleTick(pos.immutable(), thisBlock(), getFallRate());
-            return true;
         }
-        return false;
+        return state;
     }
 
-    default boolean trySpread(BlockState state, ServerLevel level, BlockPos pos, Random random)
+    default BlockState trySpread(BlockState state, ServerLevel level, BlockPos pos, Random random)
     {
         int dust = getExistingAmount(state, pos, level);
         int slope = getSlope(state);
@@ -244,6 +249,7 @@ public interface IFlowingBlock
                     left = next;
                     next = tmp;
                 }
+
                 if (next > 0)
                 {
                     BlockState oldState = setAmount(state, left);
@@ -257,12 +263,12 @@ public interface IFlowingBlock
                         level.setBlock(pos2, newState, 2);
                         level.scheduleTick(pos.immutable(), oldState.getBlock(), getFlowRate());
                         level.scheduleTick(pos2, newState.getBlock(), getFlowRate());
-                        return true;
+                        return newState;
                     }
                 }
             }
         }
-        return false;
+        return state;
     }
 
     default int getExistingAmount(BlockState state, BlockPos pos, ServerLevel level)
@@ -311,49 +317,32 @@ public interface IFlowingBlock
     }
 
     default void updateNearby(BlockPos centre, ServerLevel level, int tickRate)
+    {}
+
+    default void reScheduleTick(BlockState state, ServerLevel level, BlockPos pos)
     {
-        BlockPos.MutableBlockPos pos = new BlockPos.MutableBlockPos();
-        for (Direction d : Direction.values())
-        {
-            pos.set(centre).move(d);
-
-            ChunkPos c = new ChunkPos(pos);
-            LevelChunk chunk = level.getChunkSource().getChunkNow(c.x, c.z);
-            if (chunk == null) continue;
-
-            BlockState block = level.getBlockState(pos);
-            if (block.getBlock() instanceof IFlowingBlock b && b.flows()
-                    && !level.getBlockTicks().hasScheduledTick(pos, block.getBlock()))
-                level.scheduleTick(pos, block.getBlock(), tickRate);
-        }
+        if (!level.getBlockTicks().willTickThisTick(pos, thisBlock()))
+            level.scheduleTick(pos, thisBlock(), isFalling(state) ? getFallRate() : getFlowRate());
     }
 
     default void doTick(BlockState state, ServerLevel level, BlockPos pos, Random random)
     {
         level.getProfiler().push("flowing_block:" + this.getClass());
-        tick:
-        {
-            // Try down first;
-            level.getProfiler().push("fall_check");
-            if (tryFall(state, level, pos, random))
-            {
-                level.getProfiler().pop();
-                break tick;
-            }
-            level.getProfiler().pop();
-            // Next try spreading sideways
-            level.getProfiler().push("spread_check");
-            if (trySpread(state, level, pos, random))
-            {
-                level.getProfiler().pop();
-                break tick;
-            }
-            level.getProfiler().pop();
-            // Then apply any checks for if we were stable
-            level.getProfiler().push("stability_check:" + this.getClass());
-            onStableTick(state, level, pos, random);
-            level.getProfiler().pop();
-        }
+        int amt = getAmount(state);
+
+        // Try down first;
+        level.getProfiler().push("fall_check");
+        BlockState rem = tryFall(state, level, pos, random);
+        level.getProfiler().pop();
+        // Next try spreading sideways
+        level.getProfiler().push("spread_check");
+        if (getAmount(rem) > 0) rem = trySpread(rem, level, pos, random);
+        // Then apply any checks for if we were stable
+        level.getProfiler().push("stability_check:" + this.getClass());
+        if (getAmount(rem) == amt) onStableTick(rem, level, pos, random);
+        else if (getAmount(rem) > 0) reScheduleTick(rem, level, pos);
+        level.getProfiler().pop();
+
         level.getProfiler().pop();
     }
 

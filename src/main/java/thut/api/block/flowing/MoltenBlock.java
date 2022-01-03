@@ -8,10 +8,15 @@ import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerLevel;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.Items;
 import net.minecraft.world.level.BlockGetter;
+import net.minecraft.world.level.LevelAccessor;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.Blocks;
+import net.minecraft.world.level.block.FireBlock;
 import net.minecraft.world.level.block.RenderShape;
+import net.minecraft.world.level.block.SimpleWaterloggedBlock;
 import net.minecraft.world.level.block.state.BlockBehaviour;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.block.state.StateDefinition;
@@ -23,12 +28,13 @@ import net.minecraft.world.level.material.Fluids;
 import net.minecraft.world.phys.shapes.CollisionContext;
 import net.minecraft.world.phys.shapes.Shapes;
 import net.minecraft.world.phys.shapes.VoxelShape;
+import net.minecraftforge.fml.loading.FMLEnvironment;
 import net.minecraftforge.registries.DeferredRegister;
 import net.minecraftforge.registries.RegistryObject;
 import thut.api.item.ItemList;
 import thut.core.common.ThutCore;
 
-public class MoltenBlock extends FlowingBlock
+public abstract class MoltenBlock extends FlowingBlock implements SimpleWaterloggedBlock
 {
     public static RegistryObject<FlowingBlock>[] makeMolten(DeferredRegister<Block> BLOCKS, String modid, String layer,
             String block, BlockBehaviour.Properties layer_props, BlockBehaviour.Properties block_props,
@@ -42,7 +48,7 @@ public class MoltenBlock extends FlowingBlock
                 2);
 
         RegistryObject<FlowingBlock> layer_reg = BLOCKS.register(layer,
-                () -> new MoltenBlock(layer_props).solidBlock(() -> SolidBlock.REGMAP.get(solid_layer).get())
+                () -> new PartialMolten(layer_props).solidBlock(() -> SolidBlock.REGMAP.get(solid_layer).get())
                         .alternateBlock(() -> REGMAP.get(block_id).get()));
         REGMAP.put(layer_id, layer_reg);
 
@@ -67,7 +73,7 @@ public class MoltenBlock extends FlowingBlock
     BlockState solid_full = null;
     BlockState solid_layer = null;
 
-    public MoltenBlock(Properties properties)
+    protected MoltenBlock(Properties properties)
     {
         super(properties);
         hardenRate = 0.1f;
@@ -98,6 +104,24 @@ public class MoltenBlock extends FlowingBlock
         return RenderShape.INVISIBLE;
     }
 
+    @Override
+    public ItemStack pickupBlock(LevelAccessor level, BlockPos pos, BlockState state)
+    {
+        int amt = this.getAmount(state);
+        if (amt > 12)
+        {
+            // We are linked to the concrete fluid normally, so we let that be
+            // picked up instead.
+            level.setBlock(pos, this.empty(state), 3);
+            if (!state.canSurvive(level, pos))
+            {
+                level.destroyBlock(pos, true);
+            }
+            return new ItemStack(Items.LAVA_BUCKET);
+        }
+        return SimpleWaterloggedBlock.super.pickupBlock(level, pos, state);
+    }
+
     public MoltenBlock solidBlock(Supplier<Block> supplier)
     {
         this.solid = supplier;
@@ -123,7 +147,7 @@ public class MoltenBlock extends FlowingBlock
     @Override
     public boolean canReplace(BlockState state, BlockPos pos, ServerLevel level)
     {
-        if (this.canReplace(state, pos, level)) return true;
+        if (super.canReplace(state, pos, level)) return true;
         if (state.isFlammable(level, pos, Direction.UP)) return true;
         return false;
     }
@@ -132,6 +156,9 @@ public class MoltenBlock extends FlowingBlock
     public boolean canReplace(BlockState state)
     {
         if (ItemList.is(LAVAREPLACEABLE, state)) return true;
+        @SuppressWarnings("deprecation")
+        boolean burns = ((FireBlock) Blocks.FIRE).getBurnOdd(state) > 0;
+        if (burns) return true;
         return super.canReplace(state);
     }
 
@@ -173,6 +200,11 @@ public class MoltenBlock extends FlowingBlock
     @Override
     public void onStableTick(BlockState state, ServerLevel level, BlockPos pos, Random random)
     {
+        if (!FMLEnvironment.production)
+        {
+            tickRateFall = 1;
+            tickRateFlow = 1;
+        }
         double rng = random.nextDouble();
         harden:
         if ((!state.hasProperty(HEATED) || !state.getValue(HEATED)) && rng < hardenRate && !isFalling(state))
@@ -202,10 +234,11 @@ public class MoltenBlock extends FlowingBlock
         }
         else if (rng > hardenRate)
         {
-            level.scheduleTick(pos.immutable(), this, tickRateFall);
+            reScheduleTick(state, level, pos);
             return;
         }
         super.onStableTick(state, level, pos, random);
+        reScheduleTick(state, level, pos);
     }
 
     private void checkSolid()
@@ -276,6 +309,14 @@ public class MoltenBlock extends FlowingBlock
         public VoxelShape getBlockSupportShape(BlockState state, BlockGetter level, BlockPos pos)
         {
             return Shapes.block();
+        }
+    }
+
+    public static class PartialMolten extends MoltenBlock
+    {
+        public PartialMolten(Properties properties)
+        {
+            super(properties);
         }
     }
 }
