@@ -48,6 +48,17 @@ minecraft {
             workingDirectory project.file('run').canonicalPath
             source sourceSets.main
         }
+        test_client {
+            parent runs.client
+            taskName 'run_test_client'
+
+            environment 'MOD_CLASSES', 'dummy' // Needed to work around FG limitation, FG will replace this!
+
+            mods {
+                TestMods { sources sourceSets.test }
+                MainMods { sources sourceSets.main }
+            }
+        }
         server = {
             // recommended logging level for the console
             properties 'forge.logging.console.level': 'debug'
@@ -55,6 +66,17 @@ minecraft {
             properties '-XX': '+FlightRecorder'
             workingDirectory project.file('run').canonicalPath
             source sourceSets.main
+        }
+        test_server {
+            parent runs.server
+            taskName 'run_test_server'
+
+            environment 'MOD_CLASSES', 'dummy' // Needed to work around FG limitation, FG will replace this!
+
+            mods {
+                TestMods { sources sourceSets.test }
+                MainMods { sources sourceSets.main }
+            }
         }
         data = {
             workingDirectory project.file('run').canonicalPath
@@ -135,5 +157,5 @@ def gitVersion(value) {
     //    ver = 0
     //}
     //return "${value}.${ver}"
-    return "${value}.1"
+    return "${value}.0"
 }
