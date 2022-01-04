@@ -55,8 +55,8 @@ public abstract class FlowingBlock extends Block implements IFlowingBlock
         return arr;
     }
 
-    protected int tickRateFall = 150;
-    protected int tickRateFlow = 10;
+    public int tickRateFall = 150;
+    public int tickRateFlow = 10;
     protected boolean flows = true;
     private Supplier<Block> convert;
 
@@ -115,7 +115,7 @@ public abstract class FlowingBlock extends Block implements IFlowingBlock
     @Override
     public boolean isRandomlyTicking(BlockState state)
     {
-        return flows() && isFalling(state);
+        return flows(state) && isFalling(state);
     }
 
     @Override
@@ -147,7 +147,7 @@ public abstract class FlowingBlock extends Block implements IFlowingBlock
     @Override
     public void tick(BlockState state, ServerLevel level, BlockPos pos, Random random)
     {
-        if (this.flows()) this.doTick(state, level, pos, random);
+        if (this.flows(state)) this.doTick(state, level, pos, random);
     }
 
     @Override
@@ -192,7 +192,7 @@ public abstract class FlowingBlock extends Block implements IFlowingBlock
 
     public boolean canBeReplaced(BlockState state, BlockPlaceContext context)
     {
-        if (!this.flows()) return false;
+        if (!this.flows(state)) return false;
         int i = this.getAmount(state);
         return i < 3;
     }

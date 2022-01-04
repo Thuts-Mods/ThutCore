@@ -68,16 +68,16 @@ public abstract class MoltenBlock extends FlowingBlock implements SimpleWaterlog
     public static final BooleanProperty HEATED = BooleanProperty.create("heated");
 
     Supplier<Block> solid;
-    float hardenRate;
+    public float hardenRate;
 
-    BlockState solid_full = null;
-    BlockState solid_layer = null;
+    protected BlockState solid_full = null;
+    protected BlockState solid_layer = null;
 
     protected MoltenBlock(Properties properties)
     {
         super(properties);
-        hardenRate = 0.1f;
-        tickRateFall = 20;
+        hardenRate = 1f;
+        tickRateFall = 5;
         tickRateFlow = 5;
     }
 
@@ -99,9 +99,15 @@ public abstract class MoltenBlock extends FlowingBlock implements SimpleWaterlog
     @Override
     public RenderShape getRenderShape(BlockState state)
     {
-        if (state.hasProperty(FALLING) && state.getValue(FALLING) || !state.hasProperty(LAYERS))
-            return RenderShape.MODEL;
+        if (isFalling(state)) return RenderShape.MODEL;
         return RenderShape.INVISIBLE;
+    }
+
+    @Override
+    public boolean isRandomlyTicking(BlockState state)
+    {
+        // This one ticks so it can harden
+        return true;
     }
 
     @Override
@@ -174,9 +180,10 @@ public abstract class MoltenBlock extends FlowingBlock implements SimpleWaterlog
     @Override
     public BlockState getMergeResult(BlockState mergeFrom, BlockState mergeInto, BlockPos posTo, ServerLevel level)
     {
+        BlockState ret = super.getMergeResult(mergeFrom, mergeInto, posTo, level);
         // The result from the merge won't be heated, even if we are!
-        if (mergeFrom.hasProperty(HEATED)) mergeFrom = mergeFrom.setValue(HEATED, false);
-        return super.getMergeResult(mergeFrom, mergeInto, posTo, level);
+        if (ret != mergeInto && ret.hasProperty(HEATED)) ret = ret.setValue(HEATED, false);
+        return ret;
     }
 
     @Override
@@ -206,6 +213,7 @@ public abstract class MoltenBlock extends FlowingBlock implements SimpleWaterlog
             tickRateFlow = 1;
         }
         double rng = random.nextDouble();
+
         harden:
         if ((!state.hasProperty(HEATED) || !state.getValue(HEATED)) && rng < hardenRate && !isFalling(state))
         {
@@ -221,27 +229,25 @@ public abstract class MoltenBlock extends FlowingBlock implements SimpleWaterlog
             if (!stableBelow) break harden;
 
             int dust = getExistingAmount(state, pos, level);
-            // 16 dust, we need a full block
-            if (dust == 16)
+            BlockState solidTo = solid_full;
+            // not 16 dust, we need a layer block
+            if (dust != 16)
             {
-                level.setBlock(pos, solid_full, 2);
+                solidTo = solid_layer;
             }
-            else
-            {
-                level.setBlock(pos, solid_layer.setValue(LAYERS, dust), 2);
-            }
+            solidTo = IFlowingBlock.copyValidTo(state, solidTo);
+            level.setBlock(pos, solidTo, 2);
             return;
         }
-        else if (rng > hardenRate)
+        else if (rng > hardenRate && !isFalling(state))
         {
             reScheduleTick(state, level, pos);
             return;
         }
         super.onStableTick(state, level, pos, random);
-        reScheduleTick(state, level, pos);
     }
 
-    private void checkSolid()
+    protected void checkSolid()
     {
         if (solid_layer == null)
         {
