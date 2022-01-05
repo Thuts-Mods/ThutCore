@@ -236,10 +236,11 @@ public abstract class MoltenBlock extends FlowingBlock implements SimpleWaterlog
                 solidTo = solid_layer;
             }
             solidTo = IFlowingBlock.copyValidTo(state, solidTo);
+            solidTo = this.setAmount(solidTo, dust);
             level.setBlock(pos, solidTo, 2);
             return;
         }
-        else if (rng > hardenRate && !isFalling(state))
+        else if (rng > hardenRate)
         {
             reScheduleTick(state, level, pos);
             return;
