@@ -19,7 +19,7 @@ public class NpcContainer extends BaseContainer
     public static final MenuType<NpcContainer> TYPE = new MenuType<>(
             (IContainerFactory<NpcContainer>) NpcContainer::new);
 
-    private ResourceLocation tex = new ResourceLocation("pokecube", "textures/gui/generic_4x2.png");
+    private ResourceLocation tex = new ResourceLocation("thutcore", "textures/gui/generic_4x2.png");
 
     private final Container wrapped;
 
@@ -28,7 +28,7 @@ public class NpcContainer extends BaseContainer
         super(TYPE, id);
         final LivingEntity entity = ivplay.player;
         final int num = data.readInt();
-        final Entity mob = entity.getCommandSenderWorld().getEntity(num);
+        final Entity mob = entity.getLevel().getEntity(num);
 
         if (!(mob instanceof Villager npc)) throw new IllegalStateException("Error with accessing inventory of " + mob);
 
@@ -51,6 +51,7 @@ public class NpcContainer extends BaseContainer
                     super.onTake(thePlayer, stack);
                 }
             });
+        this.bindPlayerInventory(ivplay, -19);
     }
 
     public ResourceLocation getTexture()

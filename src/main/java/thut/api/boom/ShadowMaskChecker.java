@@ -12,19 +12,18 @@ import it.unimi.dsi.fastutil.longs.LongOpenHashSet;
 import it.unimi.dsi.fastutil.longs.LongSet;
 import it.unimi.dsi.fastutil.objects.Object2FloatOpenHashMap;
 import net.minecraft.core.BlockPos;
-import net.minecraft.util.Mth;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.level.ChunkPos;
 import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.level.levelgen.Heightmap.Types;
 import thut.api.boom.ExplosionCustom.BlastResult;
 import thut.api.boom.ExplosionCustom.HitEntity;
 import thut.api.item.ItemList;
-import thut.api.maths.Cruncher;
 import thut.api.maths.Vector3;
-import thut.api.maths.vecmath.Vector3f;
+import thut.api.maths.vecmath.Vec3f;
 import thut.core.common.ThutCore;
 
-public class Checker
+public abstract class ShadowMaskChecker extends AbstractChecker
 {
     public static interface ResistProvider
     {
@@ -53,7 +52,7 @@ public class Checker
 
         }
 
-        default float getTotalValue(final Vector3 rHat, final float r, final int minCube, final ExplosionCustom boom)
+        default float getTotalValue(final Vector3 rHat, final float r, final int minCube, final ShadowMaskChecker boom)
         {
 
             float resist = 0;
@@ -65,25 +64,25 @@ public class Checker
                 boom.rTest.set(boom.rHat).scalarMultBy(j);
                 if (!boom.rTest.sameBlock(boom.rTestPrev))
                 {
-                    boom.rTestAbs.set(boom.rTest).addTo(boom.centre);
+                    boom.rTestAbs.set(boom.rTest).addTo(boom.boom.centre);
                     final BlockPos testPos = boom.rTest.getPos();
                     if (this.has(testPos)) res = this.get(testPos);
                     else
                     {
                         // Ensure the chunk exists.
                         final ChunkPos cpos = new ChunkPos(boom.rTestAbs.getPos());
-                        boom.level.getChunk(cpos.x, cpos.z);
-                        res = boom.resistProvider.getResistance(boom.rTestAbs.getPos(), boom);
+                        boom.boom.level.getChunk(cpos.x, cpos.z);
+                        res = boom.boom.resistProvider.getResistance(boom.rTestAbs.getPos(), boom.boom);
                         this.set(testPos, res);
                     }
                     resist += res;
-                    final float str = (float) (boom.strength / boom.rTest.magSq());
+                    final float str = (float) (boom.boom.strength / boom.rTest.magSq());
                     // too hard, so set as blocked and flag for next site.
                     if (resist > str)
                     {
                         boom.shadow.block(boom.r.getPos(), boom.rHat);
                         boom.ind3++;
-                        return boom.strength;
+                        return boom.boom.strength;
                     }
                 }
                 boom.rTestPrev.set(boom.rTest);
@@ -140,7 +139,7 @@ public class Checker
 
         final float num;
 
-        Vector3 tmp = Vector3.getNewVector();
+        Vector3 tmp = new Vector3();
 
         public ShadowSet(final ExplosionCustom boom)
         {
@@ -194,7 +193,7 @@ public class Checker
         int minCube = Integer.MAX_VALUE;
         int minFound = -1;
 
-        Vector3 tmp = Vector3.getNewVector();
+        Vector3 tmp = new Vector3();
 
         public Cubes(final ExplosionCustom boom)
         {
@@ -233,7 +232,7 @@ public class Checker
         }
 
         @Override
-        public float getTotalValue(final Vector3 rHat, final float r, final int minCube, final ExplosionCustom boom)
+        public float getTotalValue(final Vector3 rHat, final float r, final int minCube, final ShadowMaskChecker boom)
         {
             return ResistCache.super.getTotalValue(rHat, r, minCube, boom);
         }
@@ -339,73 +338,119 @@ public class Checker
         }
     }
 
-    final ExplosionCustom boom;
+    final Vec3f unit = new Vec3f();
 
-    final Vector3f unit = new Vector3f();
+    Vec3f min = new Vec3f(-1, -1, -1);
+    Vec3f max = new Vec3f(1, 1, 1);
 
-    public Checker(final ExplosionCustom boom)
+    Vec3f min_next = new Vec3f(1, 1, 1);
+    Vec3f max_next = new Vec3f(-1, -1, -1);
+
+    int currentIndex = 0;
+    int nextIndex = 0;
+
+    int currentRadius = 0;
+
+    double last_phi = 0;
+    double last_rad = 0.25;
+
+    int ind1;
+    int ind2;
+    int ind3;
+    int ind4;
+
+    float lastBoundCheck = 10;
+
+    // DOLATER figure out a good way to clear these between each set of shells.
+    Long2FloatOpenHashMap resistMap = new Long2FloatOpenHashMap();
+
+    LongSet blockedSet = new LongOpenHashSet();
+
+    ShadowMap shadow;
+
+    ResistCache resists;
+
+    // used to speed up the checking of if a resist exists in the map
+    LongSet checked = new LongOpenHashSet();
+    LongSet seen = new LongOpenHashSet();
+
+    Cubes cubes;
+
+    Vector3 r = new Vector3(), rAbs = new Vector3(), rHat = new Vector3(), rTest = new Vector3(),
+            rTestPrev = new Vector3(), rTestAbs = new Vector3();
+
+    public ShadowMaskChecker(final ExplosionCustom boom)
     {
-        this.boom = boom;
+        super(boom);
+
+        this.cubes = new Cubes(boom);
+        this.shadow = new ShadowSet(boom);
+        this.resists = new ResistMap();
+        this.resists = this.cubes;
+
+        this.lastBoundCheck = boom.centre.intY()
+                - boom.level.getHeight(Types.MOTION_BLOCKING, boom.centre.intX(), boom.centre.intZ()) + 10;
+        this.lastBoundCheck = Math.max(this.lastBoundCheck, 10);
     }
 
-    private boolean outOfBounds(final Vector3f unit)
+    private boolean outOfBounds(final Vec3f unit)
     {
-        if (unit.x < this.boom.min.x) return true;
-        if (unit.y < this.boom.min.y) return true;
-        if (unit.z < this.boom.min.z) return true;
+        if (unit.x < this.min.x) return true;
+        if (unit.y < this.min.y) return true;
+        if (unit.z < this.min.z) return true;
 
-        if (unit.x > this.boom.max.x) return true;
-        if (unit.y > this.boom.max.y) return true;
-        if (unit.z > this.boom.max.z) return true;
+        if (unit.x > this.max.x) return true;
+        if (unit.y > this.max.y) return true;
+        if (unit.z > this.max.z) return true;
 
         return false;
     }
 
     private void validateMinMax(final float r)
     {
-        if (r - this.boom.lastBoundCheck > 5)
+        if (r - this.lastBoundCheck > 5)
         {
-            this.boom.min.set(this.boom.min_next);
-            this.boom.max.set(this.boom.max_next);
+            this.min.set(this.min_next);
+            this.max.set(this.max_next);
             // Gives some area around the blocked sections for actually being
             // checked.
             final float s = 1.0f;
-            this.boom.min.scale(s);
-            this.boom.max.scale(s);
-            this.boom.min_next.set(1, 1, 1);
-            this.boom.max_next.set(-1, -1, -1);
-            this.boom.lastBoundCheck = r;
+            this.min.scale(s);
+            this.max.scale(s);
+            this.min_next.set(1, 1, 1);
+            this.max_next.set(-1, -1, -1);
+            this.lastBoundCheck = r;
             ThutCore.LOGGER.debug("Strength: {}, Max radius: {}, Last Radius: {}", this.boom.strength, this.boom.radius,
                     (int) r);
-            this.boom.shadow.clean(this.boom);
+            this.shadow.clean(this.boom);
         }
         else
         {
-            this.boom.min_next.x = Math.min(this.boom.min_next.x, this.unit.x);
-            this.boom.min_next.y = Math.min(this.boom.min_next.y, this.unit.y);
-            this.boom.min_next.z = Math.min(this.boom.min_next.z, this.unit.z);
+            this.min_next.x = Math.min(this.min_next.x, this.unit.x);
+            this.min_next.y = Math.min(this.min_next.y, this.unit.y);
+            this.min_next.z = Math.min(this.min_next.z, this.unit.z);
 
-            this.boom.max_next.x = Math.max(this.boom.max_next.x, this.unit.x);
-            this.boom.max_next.y = Math.max(this.boom.max_next.y, this.unit.y);
-            this.boom.max_next.z = Math.max(this.boom.max_next.z, this.unit.z);
+            this.max_next.x = Math.max(this.max_next.x, this.unit.x);
+            this.max_next.y = Math.max(this.max_next.y, this.unit.y);
+            this.max_next.z = Math.max(this.max_next.z, this.unit.z);
         }
     }
 
-    private boolean run(final double radSq, final int num, final Set<ChunkPos> seen,
+    protected boolean run(final double radSq, final int num, final Set<ChunkPos> seen,
             final Object2FloatOpenHashMap<BlockPos> ret, final List<HitEntity> entityAffected)
     {
         double rMag;
         double str;
         ChunkPos cpos;
 
-        if (this.boom.r.y + this.boom.centre.y > this.boom.level.getMaxBuildHeight()) return false;
-        final double rSq = this.boom.r.magSq();
+        if (this.r.y + this.boom.centre.y > this.boom.level.getMaxBuildHeight()) return false;
+        final double rSq = this.r.magSq();
         if (rSq > radSq) return false;
         rMag = Math.sqrt(rSq);
-        this.boom.rAbs.set(this.boom.r).addTo(this.boom.centre);
-        this.boom.rHat.set(this.boom.r).norm();
-        final BlockPos relPos = this.boom.r.getPos();
-        this.unit.set(this.boom.rHat);
+        this.rAbs.set(this.r).addTo(this.boom.centre);
+        this.rHat.set(this.r).norm();
+        final BlockPos relPos = this.r.getPos();
+        this.unit.set(this.rHat);
         if (this.outOfBounds(this.unit)) return false;
 
         str = this.boom.strength / rSq;
@@ -413,35 +458,35 @@ public class Checker
         if (str <= this.boom.minBlastDamage) return true;
 
         // Already checked here, so we exit.
-        if (this.boom.shadow.hasHit(relPos)) return false;
-        this.boom.shadow.hit(relPos);
-        this.boom.ind4++;
+        if (this.shadow.hasHit(relPos)) return false;
+        this.shadow.hit(relPos);
+        this.ind4++;
 
         // Already blocked here, so we exit.
-        if (this.boom.shadow.blocked(relPos, this.boom.rHat))
+        if (this.shadow.blocked(relPos, this.rHat))
         {
-            this.boom.ind1++;
+            this.ind1++;
             return false;
         }
 
         // Ensure the chunk exists.
-        cpos = new ChunkPos(this.boom.rAbs.getPos());
+        cpos = new ChunkPos(this.rAbs.getPos());
         if (seen.add(cpos)) this.boom.level.getChunk(cpos.x, cpos.z);
 
-        final boolean doAirCheck = this.boom.rHat.y < this.boom.max.y * 0.9 && this.boom.rHat.y > this.boom.min.y * 0.9;
+        final boolean doAirCheck = this.rHat.y < this.max.y * 0.9 && this.rHat.y > this.min.y * 0.9;
 
         // // Check for mobs to hit at this point.
-        if (doAirCheck && this.boom.rAbs.isAir(this.boom.level) && !this.boom.r.isEmpty())
+        if (doAirCheck && this.rAbs.isAir(this.boom.level) && !this.r.isEmpty())
         {
             if (ExplosionCustom.AFFECTINAIR)
             {
                 final List<Entity> hits = this.boom.level.getEntities(this.boom.exploder,
-                        this.boom.rAbs.getAABB().inflate(0.5, 0.5, 0.5));
+                        this.rAbs.getAABB().inflate(0.5, 0.5, 0.5));
                 // If this is the case, we do actually need to trace to there.
                 if (hits != null && !hits.isEmpty())
                 {
-                    rMag = this.boom.r.mag();
-                    final float res = this.boom.resists.getTotalValue(this.boom.rHat, (float) rMag, 0, this.boom);
+                    rMag = this.r.mag();
+                    final float res = this.resists.getTotalValue(this.rHat, (float) rMag, 0, this);
                     if (res <= str) for (final Entity e : hits) entityAffected.add(new HitEntity(e, (float) str));
                 }
             }
@@ -449,33 +494,33 @@ public class Checker
             return false;
         }
         // Continue to next site, we can't break this block.
-        if (!this.boom.canBreak(this.boom.rAbs, this.boom.rAbs.getBlockState(this.boom.level)))
+        if (!this.boom.canBreak(this.rAbs, this.rAbs.getBlockState(this.boom.level)))
         {
-            this.boom.shadow.block(relPos, this.boom.rHat);
-            this.boom.ind2++;
+            this.shadow.block(relPos, this.rHat);
+            this.ind2++;
             return false;
         }
-        float res = this.boom.resistProvider.getResistance(this.boom.rAbs.getPos(), this.boom);
-        this.boom.resists.set(relPos, res);
+        float res = this.boom.resistProvider.getResistance(this.rAbs.getPos(), this.boom);
+        this.resists.set(relPos, res);
 
-        rMag = this.boom.r.mag();
-        res = this.boom.resists.getTotalValue(this.boom.rHat, (float) rMag, 0, this.boom);
+        rMag = this.r.mag();
+        res = this.resists.getTotalValue(this.rHat, (float) rMag, 0, this);
 
         // This block is too strong, so continue to next block.
         if (res > str)
         {
-            this.boom.shadow.block(relPos, this.boom.rHat);
+            this.shadow.block(relPos, this.rHat);
             return false;
         }
 
         this.validateMinMax((float) rMag);
-        this.boom.rAbs.set(this.boom.r).addTo(this.boom.centre);
-        final BlockPos pos = this.boom.rAbs.getPos().immutable();
+        this.rAbs.set(this.r).addTo(this.boom.centre);
+        final BlockPos pos = this.rAbs.getPos().immutable();
         // Add as affected location.
         this.boom.getToBlow().add(pos);
         // Check for additional mobs to hit.
         final List<Entity> hits = this.boom.level.getEntities(this.boom.exploder,
-                this.boom.rAbs.getAABB().inflate(0.5, 0.5, 0.5));
+                this.rAbs.getAABB().inflate(0.5, 0.5, 0.5));
         if (hits != null) for (final Entity e : hits) entityAffected.add(new HitEntity(e, (float) str));
         // Add to blocks to remove list.
         ret.addTo(pos, (float) str);
@@ -483,131 +528,29 @@ public class Checker
         return false;
     }
 
+    protected abstract boolean apply(Object2FloatOpenHashMap<BlockPos> ret, List<HitEntity> entityAffected,
+            HashSet<ChunkPos> seen);
+
+    @Override
     protected BlastResult getBlocksToRemove()
     {
-        final int threshold = this.boom.maxPerTick;
-        int num = (int) Math.sqrt(this.boom.strength / 0.5);
-        final int max = this.boom.radius * 2 + 1;
-        num = Math.min(num, max);
-        final int numCubed = num * num * num;
-        final double radSq = num * num / 4;
-        int increment = 0;
+        beginLoop();
         final Object2FloatOpenHashMap<BlockPos> ret = new Object2FloatOpenHashMap<>();
         final List<HitEntity> entityAffected = Lists.newArrayList();
         final HashSet<ChunkPos> seen = new HashSet<>();
-        boolean done = boom.last_rad >= boom.radius;
-
-        final boolean sphere = true;
-
-        final long start = System.currentTimeMillis();
-        final long nanoS = System.nanoTime();
-
-        if (!sphere)
-        {
-            final int ind = this.boom.currentIndex;
-            final int maxIndex = numCubed;
-            for (this.boom.currentIndex = ind; this.boom.currentIndex < maxIndex; this.boom.currentIndex++)
-            {
-                increment++;
-                final long time = System.currentTimeMillis();
-                // Break out early if we have taken too long.
-                if (time - start > threshold)
-                {
-                    done = false;
-                    break;
-                }
-                Cruncher.indexToVals(this.boom.currentIndex, this.boom.r, sphere);
-                done = this.run(radSq, num, seen, ret, entityAffected);
-                if (done) break;
-            }
-        }
-        else
-        {
-
-            double radius = this.boom.last_rad;
-            final double C = 4;
-            double area = 4 * Math.PI * radius * radius;
-            final float grid = 0.5f;
-            float N = (float) Math.ceil(area / grid);
-            boom:
-            while (System.currentTimeMillis() - start < threshold && radius < this.boom.radius)
-            {
-                int k;
-                double phi_k_1 = this.boom.last_phi;
-                if (this.boom.currentIndex < 1) this.boom.currentIndex = 1;
-
-                // Easy critera to skip a good portion of the loop, as we
-                // can easily determine which ending index will fit within the
-                // maximum value of y on the unit sphere which was checked
-                // in the last shell.
-                final int k_end = this.yToKMax(this.boom.max.y, N);
-                final float sqrtN = (float) Math.sqrt(N);
-
-                // Spiral algorithm based on
-                // https://doi.org/10.1007/BF03024331
-                for (k = this.boom.currentIndex; k <= k_end; k++)
-                {
-                    this.boom.currentIndex = k;
-                    // Break out early if we have taken too long.
-                    if (System.currentTimeMillis() - start > threshold)
-                    {
-                        done = false;
-                        break boom;
-                    }
-                    final float h_k = -this.kToY(k, N);
-                    final float sin_theta = (float) Math.sqrt(1 - h_k * h_k);
-                    final float phi_k = (float) (k > 1 && k < N ? (phi_k_1 + C / (sqrtN * sin_theta)) % (2 * Math.PI)
-                            : 0);
-                    this.boom.last_phi = phi_k_1 = phi_k;
-                    final double x = sin_theta * Mth.cos(phi_k) * radius;
-                    final double y = h_k * radius;
-                    final double z = sin_theta * Mth.sin(phi_k) * radius;
-                    this.boom.rTest.set(x, y, z);
-                    this.boom.r.set(this.boom.rTest.intX(), this.boom.rTest.intY(), this.boom.rTest.intZ());
-                    done = this.run(radSq, num, seen, ret, entityAffected);
-                    if (done) break boom;
-                }
-                // This gives us an easy way to determine which is the first
-                // value of k which will result in a point that will fall within
-                // the bounds of the last unit-sphere checked. Y is most likely
-                // to run out first, as that is the most limited coordinate
-                // here, as usually at least half of it is masked by the ground.
-                int k_start = this.yToKMin(this.boom.min.y, N);
-
-                this.boom.currentIndex = 1;
-                this.boom.last_phi = 0;
-                radius += grid;
-                area = 4 * Math.PI * radius * radius;
-                N = (float) Math.ceil(area / grid);
-                k_start = this.yToKMin(this.boom.min.y, N);
-                this.boom.currentIndex = k_start;
-                this.boom.currentRadius = Mth.ceil(radius);
-            }
-            this.boom.last_rad = radius;
-        }
-
-        this.boom.totalTime += System.nanoTime() - nanoS;
-        // Increment the boom index for next pass.
-        this.boom.nextIndex = this.boom.currentIndex + increment;
+        boolean done = this.apply(ret, entityAffected, seen);
+        endLoop();
         return new BlastResult(ret, entityAffected, seen, done);
     }
 
-    float kToY(final int k, final float N)
+    @Override
+    protected void printDebugInfo()
     {
-        return -1 + 2 * (k - 1) / (N - 1);
-    }
-
-    int yToKMin(final float y, final float N)
-    {
-        int k = (int) (1 + (y + 1) * (N - 1) / 2);
-        k = Math.max(1, k);
-        return k;
-    }
-
-    int yToKMax(final float y, final float N)
-    {
-        int k = Mth.ceil(1 + (y + 1) * (N - 1) / 2);
-        k = (int) Math.min(N, k);
-        return k;
+        this.realTotalTime = System.nanoTime() - this.realTotalTime;
+        ThutCore.LOGGER.info("Strength: {}, Max radius: {}, Last Radius: {}", this.boom.strength / this.boom.factor,
+                this.boom.radius, this.r.mag());
+        ThutCore.LOGGER.info("time (tick/real): {}/{}ms, {} shadowed, {} denied, {} blocked, {} checked",
+                this.totalTime / 1e6, this.realTotalTime / 1e6, this.ind1, this.ind2, this.ind3, this.ind4);
+        ThutCore.LOGGER.info("bounds: {} {}", this.min, this.max);
     }
 }

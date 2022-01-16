@@ -46,10 +46,21 @@ import thut.api.terrain.TerrainManager;
 import thut.api.terrain.TerrainSegment;
 import thut.core.client.gui.NpcScreen;
 import thut.core.client.render.particle.ParticleFactories;
+import thut.core.common.ThutCore;
 
 @Mod.EventBusSubscriber(bus = Mod.EventBusSubscriber.Bus.FORGE, value = Dist.CLIENT)
 public class ClientInit
 {
+    @Mod.EventBusSubscriber(bus = Mod.EventBusSubscriber.Bus.MOD, modid = ThutCore.MODID, value = Dist.CLIENT)
+    public static class ModInit
+    {
+        @SubscribeEvent
+        public static void setupClient(final FMLClientSetupEvent event)
+        {
+            MenuScreens.register(NpcContainer.TYPE, NpcScreen::new);
+        }
+    }
+
     public static void line(final VertexConsumer builder, final Matrix4f positionMatrix, final float dx1,
             final float dy1, final float dz1, final float dx2, final float dy2, final float dz2, final float r,
             final float g, final float b, final float a)
@@ -85,7 +96,7 @@ public class ClientInit
         final boolean debug = Minecraft.getInstance().options.renderDebug;
         if (!debug) return;
         final TerrainSegment t = TerrainManager.getInstance().getTerrainForEntity(Minecraft.getInstance().player);
-        final Vector3 v = Vector3.getNewVector().set(Minecraft.getInstance().player);
+        final Vector3 v = new Vector3().set(Minecraft.getInstance().player);
         final BiomeType type = t.getBiome(v);
         final String msg = "Sub-Biome: " + I18n.get(type.readableName) + " (" + type.name + ")";
         if (event.getLeft().contains(msg)) return;
@@ -135,12 +146,6 @@ public class ClientInit
         final Player player = Minecraft.getInstance().player;
         final ICopyMob copied = CopyCaps.get(player);
         if (copied != null && copied.getCopiedMob() != null) event.setCanceled(true);
-    }
-
-    @SubscribeEvent
-    public static void setupClient(final FMLClientSetupEvent event)
-    {
-        MenuScreens.register(NpcContainer.TYPE, NpcScreen::new);
     }
 
     @SubscribeEvent
