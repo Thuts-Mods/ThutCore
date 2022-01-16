@@ -157,5 +157,5 @@ def gitVersion(value) {
     //    ver = 0
     //}
     //return "${value}.${ver}"
-    return "${value}.3"
+    return "${value}.0"
 }
