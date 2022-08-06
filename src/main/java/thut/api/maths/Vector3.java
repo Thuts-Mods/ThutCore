@@ -14,6 +14,8 @@ import net.minecraft.core.BlockPos.MutableBlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.core.Direction8;
 import net.minecraft.core.GlobalPos;
+import net.minecraft.core.Holder;
+import net.minecraft.core.Holder.Direct;
 import net.minecraft.core.QuartPos;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.network.protocol.game.ClientboundLevelChunkWithLightPacket;
@@ -557,7 +559,7 @@ public class Vector3
         for (final Entity entity1 : mobs) if ((parts = entity1.getParts()) != null && parts.length > 0) partcheck:
         for (final PartEntity<?> part : parts)
         {
-            final AABB axisalignedbb = part.getBoundingBox().inflate(0.3F);
+            final AABB axisalignedbb = part.getBoundingBox().inflate(0.01F);
             final Optional<Vec3> optional = axisalignedbb.clip(vec3, vec32);
             if (optional.isPresent())
             {
@@ -572,7 +574,7 @@ public class Vector3
         }
         else
         {
-            final AABB axisalignedbb = entity1.getBoundingBox().inflate(0.3F);
+            final AABB axisalignedbb = entity1.getBoundingBox().inflate(0.01F);
             final Optional<Vec3> optional = axisalignedbb.clip(vec3, vec32);
             if (optional.isPresent())
             {
@@ -603,9 +605,14 @@ public class Vector3
         return new AABB(this.x, this.y, this.z, this.x, this.y, this.z);
     }
 
-    public Biome getBiome(final LevelAccessor world)
+    public Holder<Biome> getBiomeHolder(final LevelAccessor world)
     {
         return world.getBiome(this.getPos());
+    }
+
+    public Biome getBiome(final LevelAccessor world)
+    {
+        return this.getBiomeHolder(world).value();
     }
 
     public Block getBlock(final BlockGetter worldMap)
@@ -1090,13 +1097,14 @@ public class Vector3
         int j = chunk.getSectionIndex(QuartPos.toBlock(l));
 
         LevelChunkSection section = chunk.getSections()[j];
-        PalettedContainer<Biome> biomes = section.getBiomes();
+        PalettedContainer<Holder<Biome>> biomes = section.getBiomes();
 
-        Biome old = biomes.get(qx & 3, l & 3, qz & 3);
+        Biome old = biomes.get(qx & 3, l & 3, qz & 3).value();
         // No need to run this if we are already the same biome...
         if (old == biome) return;
 
-        biomes.set(qx & 3, l & 3, qz & 3, biome);
+        // TODO see if this works?
+        biomes.set(qx & 3, l & 3, qz & 3, new Direct<Biome>(biome));
 
         if (chunk instanceof LevelChunk lchunk)
         {

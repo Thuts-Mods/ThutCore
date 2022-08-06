@@ -5,15 +5,20 @@ import java.util.Map;
 import java.util.Map.Entry;
 import java.util.Set;
 
+import javax.annotation.Nullable;
+
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 
 import net.minecraft.core.BlockPos;
+import net.minecraft.core.Registry;
+import net.minecraft.core.RegistryAccess;
 import net.minecraft.core.SectionPos;
 import net.minecraft.resources.ResourceKey;
+import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.level.ChunkPos;
 import net.minecraft.world.level.Level;
-import net.minecraft.world.level.levelgen.feature.StructureFeature;
+import net.minecraft.world.level.levelgen.feature.ConfiguredStructureFeature;
 import net.minecraft.world.level.levelgen.structure.BoundingBox;
 import net.minecraft.world.level.levelgen.structure.StructurePiece;
 import net.minecraft.world.level.levelgen.structure.StructureStart;
@@ -25,25 +30,25 @@ public class StructureManager
 {
     public static class StructureInfo
     {
-        public String            name;
-        public StructureStart<?> start;
+        private String name = null;
+        public ConfiguredStructureFeature<?, ?> feature;
+        public StructureStart start;
 
-        private int    hash = -1;
+        private int hash = -1;
         private String key;
 
-        public StructureInfo()
+        public StructureInfo(String name, final Entry<ConfiguredStructureFeature<?, ?>, StructureStart> entry)
         {
+            this.feature = entry.getKey();
+            this.name = name;
+            this.start = entry.getValue();
         }
 
-        public StructureInfo(final Entry<StructureFeature<?>, StructureStart<?>> entry)
+        public StructureInfo(String name, ConfiguredStructureFeature<?, ?> feature, StructureStart start)
         {
-            this.name = entry.getKey().getFeatureName();
-            this.start = entry.getValue();
-            if (this.name == null)
-            {
-                this.name = "unk?";
-                ThutCore.LOGGER.warn("Warning, null name for start: {}", this.start);
-            }
+            this.feature = feature;
+            this.name = name;
+            this.start = start;
         }
 
         private BoundingBox inflate(final BoundingBox other, final int amt)
@@ -84,10 +89,10 @@ public class StructureManager
             for (int x = x1; x < x1 + TerrainSegment.GRIDSIZE; x++)
                 for (int y = y1; y < y1 + TerrainSegment.GRIDSIZE; y++)
                     for (int z = z1; z < z1 + TerrainSegment.GRIDSIZE; z++)
-                    {
-                        pos = new BlockPos(x, y, z);
-                        if (b.isInside(pos)) return true;
-                    }
+            {
+                pos = new BlockPos(x, y, z);
+                if (b.isInside(pos)) return true;
+            }
             return false;
         }
 
@@ -108,10 +113,24 @@ public class StructureManager
         @Override
         public String toString()
         {
-            if (this.start.getPieces().isEmpty()) return this.name;
-            if (this.key == null) this.key = this.name + " " + this.start.getBoundingBox();
+            if (this.start.getPieces().isEmpty()) return this.getName();
+            if (this.key == null) this.key = this.getName() + " " + this.start.getBoundingBox();
             this.hash = this.key.hashCode();
             return this.key;
+        }
+
+        public String getName()
+        {
+            return name;
+        }
+
+        public boolean matches(@Nullable RegistryAccess reg, String key)
+        {
+            if (reg == null) return key.equals(getName());
+            var regi = reg.registryOrThrow(Registry.CONFIGURED_STRUCTURE_FEATURE_REGISTRY);
+            var tags = regi.getHolderOrThrow(regi.getResourceKey(feature).get()).tags().toList();
+            for (var tag : tags) if (tag.location().toString().equals(key)) return true;
+            return key.equals(getName());
         }
     }
 
@@ -136,8 +155,19 @@ public class StructureManager
         final Set<StructureInfo> forPos = StructureManager.map_by_pos.getOrDefault(pos, Collections.emptySet());
         if (forPos.isEmpty()) return forPos;
         final Set<StructureInfo> matches = Sets.newHashSet();
-        for (final StructureInfo i : forPos)
-            if (i.isIn(loc)) matches.add(i);
+        for (final StructureInfo i : forPos) if (i.isIn(loc)) matches.add(i);
+        return matches;
+    }
+
+    public static Set<StructureInfo> getFor(final ServerLevel dim, final BlockPos loc)
+    {
+        final Set<StructureInfo> matches = Sets.newHashSet();
+        return matches;
+    }
+
+    public static Set<StructureInfo> getNear(final ServerLevel dim, final BlockPos loc, int distance)
+    {
+        final Set<StructureInfo> matches = Sets.newHashSet();
         return matches;
     }
 
@@ -148,8 +178,7 @@ public class StructureManager
         final Set<StructureInfo> forPos = StructureManager.map_by_pos.getOrDefault(gpos, Collections.emptySet());
         if (forPos.isEmpty()) return forPos;
         final Set<StructureInfo> matches = Sets.newHashSet();
-        for (final StructureInfo i : forPos)
-            if (i.isNear(loc, distance)) matches.add(i);
+        for (final StructureInfo i : forPos) if (i.isNear(loc, distance)) matches.add(i);
         return matches;
     }
 
@@ -159,9 +188,8 @@ public class StructureManager
         final ChunkPos origin = new ChunkPos(loc);
         int dr = SectionPos.blockToSectionCoord(distance);
         dr = Math.max(dr, 1);
-        for (int x = origin.x - dr; x <= origin.x + dr; x++)
-            for (int z = origin.z - dr; z <= origin.z + dr; z++)
-                matches.addAll(StructureManager.getNearInt(dim, loc, new ChunkPos(x, z), distance));
+        for (int x = origin.x - dr; x <= origin.x + dr; x++) for (int z = origin.z - dr; z <= origin.z + dr; z++)
+            matches.addAll(StructureManager.getNearInt(dim, loc, new ChunkPos(x, z), distance));
         return matches;
     }
 
@@ -169,29 +197,30 @@ public class StructureManager
     public static void onChunkLoad(final ChunkEvent.Load evt)
     {
         // The world is null when it is loaded off thread during worldgen!
-        if (!(evt.getWorld() instanceof Level) || evt.getWorld().isClientSide()) return;
-        final Level w = (Level) evt.getWorld();
+        if (!(evt.getWorld() instanceof Level w) || evt.getWorld().isClientSide()) return;
         final ResourceKey<Level> dim = w.dimension();
-        for (final Entry<StructureFeature<?>, StructureStart<?>> entry : evt.getChunk().getAllStarts().entrySet())
+        var reg = w.registryAccess().registryOrThrow(Registry.CONFIGURED_STRUCTURE_FEATURE_REGISTRY);
+        for (final Entry<ConfiguredStructureFeature<?, ?>, StructureStart> entry : evt.getChunk().getAllStarts()
+                .entrySet())
         {
-            final StructureInfo info = new StructureInfo(entry);
+            String name = reg.getKey(entry.getKey()).toString();
+            final StructureInfo info = new StructureInfo(name, entry);
             if (!info.start.isValid()) continue;
 
             final BoundingBox b = info.start.getBoundingBox();
             if (b.getXSpan() > 2560 || b.getZSpan() > 2560)
             {
-                ThutCore.LOGGER.warn("Warning, too big box for {}: {}", info.name, b);
+                ThutCore.LOGGER.warn("Warning, too big box for {}: {}", info.getName(), b);
                 continue;
             }
 
-            for (int x = b.minX >> 4; x <= b.maxX >> 4; x++)
-                for (int z = b.minZ >> 4; z <= b.maxZ >> 4; z++)
-                {
-                    final ChunkPos p = new ChunkPos(x, z);
-                    final GlobalChunkPos pos = new GlobalChunkPos(dim, p);
-                    final Set<StructureInfo> set = StructureManager.getOrMake(pos);
-                    set.add(info);
-                }
+            for (int x = b.minX >> 4; x <= b.maxX >> 4; x++) for (int z = b.minZ >> 4; z <= b.maxZ >> 4; z++)
+            {
+                final ChunkPos p = new ChunkPos(x, z);
+                final GlobalChunkPos pos = new GlobalChunkPos(dim, p);
+                final Set<StructureInfo> set = StructureManager.getOrMake(pos);
+                set.add(info);
+            }
         }
     }
 

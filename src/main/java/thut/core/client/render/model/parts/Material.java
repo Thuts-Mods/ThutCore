@@ -8,6 +8,7 @@ import com.mojang.blaze3d.vertex.DefaultVertexFormat;
 import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.blaze3d.vertex.VertexConsumer;
 import com.mojang.blaze3d.vertex.VertexFormat;
+import com.mojang.blaze3d.vertex.VertexFormat.Mode;
 
 import net.minecraft.client.renderer.MultiBufferSource;
 import net.minecraft.client.renderer.MultiBufferSource.BufferSource;
@@ -34,6 +35,15 @@ public class Material
                     .setTextureState(RenderStateShard.NO_TEXTURE).setWriteMaskState(RenderStateShard.DEPTH_WRITE)
                     .createCompositeState(false));
 
+    public static final Map<String, RenderStateShard.ShaderStateShard> SHADERS = Maps.newHashMap();
+
+    static
+    {
+        SHADERS.put("alpha_shader", RenderStateShard.RENDERTYPE_ENTITY_ALPHA_SHADER);
+        SHADERS.put("eyes_shader", RenderStateShard.RENDERTYPE_EYES_SHADER);
+        SHADERS.put("swirl_shader", RenderStateShard.RENDERTYPE_ENERGY_SWIRL_SHADER);
+    }
+
     public static final DepthTestStateShard LESSTHAN = new DepthTestStateShard("<", 513);
 
     public final String name;
@@ -53,6 +63,8 @@ public class Material
     public boolean transluscent = false;
     public boolean cull = true;
     public boolean flat = true;
+
+    public String shader = "";
 
     static MultiBufferSource.BufferSource lastImpl = null;
 
@@ -79,11 +91,16 @@ public class Material
 
     public void makeVertexBuilder(final ResourceLocation texture, final MultiBufferSource buffer)
     {
-        this.makeRenderType(texture);
+        makeVertexBuilder(texture, buffer, Mode.TRIANGLES);
+    }
+
+    public void makeVertexBuilder(final ResourceLocation texture, final MultiBufferSource buffer, Mode mode)
+    {
+        this.makeRenderType(texture, mode);
         if (buffer instanceof BufferSource) Material.lastImpl = (BufferSource) buffer;
     }
 
-    private RenderType makeRenderType(final ResourceLocation tex)
+    private RenderType makeRenderType(final ResourceLocation tex, Mode mode)
     {
         this.tex = tex;
         if (this.types.containsKey(tex)) return this.types.get(tex);
@@ -97,34 +114,33 @@ public class Material
         }
 
         final String id = this.render_name + tex;
-        // if (this.emissiveMagnitude == 0)
+        final RenderType.CompositeState.CompositeStateBuilder builder = RenderType.CompositeState.builder();
+        // No blur, No MipMap
+        builder.setTextureState(new RenderStateShard.TextureStateShard(tex, false, false));
+
+        builder.setTransparencyState(Material.DEFAULTTRANSP);
+
+        RenderStateShard.ShaderStateShard shard = SHADERS.getOrDefault(shader,
+                RenderStateShard.RENDERTYPE_ENTITY_TRANSLUCENT_SHADER);
+
+        builder.setShaderState(shard);
+
+        // These are needed in general for world lighting
+        builder.setLightmapState(RenderStateShard.LIGHTMAP);
+        builder.setOverlayState(RenderStateShard.OVERLAY);
+
+        final boolean transp = this.alpha < 1 || this.transluscent;
+        if (transp)
         {
-            final RenderType.CompositeState.CompositeStateBuilder builder = RenderType.CompositeState.builder();
-            // No blur, No MipMap
-            builder.setTextureState(new RenderStateShard.TextureStateShard(tex, false, false));
-
-            builder.setTransparencyState(Material.DEFAULTTRANSP);
-
-            builder.setShaderState(RenderStateShard.RENDERTYPE_ENTITY_TRANSLUCENT_SHADER);
-
-            // These are needed in general for world lighting
-            builder.setLightmapState(RenderStateShard.LIGHTMAP);
-            builder.setOverlayState(RenderStateShard.OVERLAY);
-
-            final boolean transp = this.alpha < 1 || this.transluscent;
-            if (transp)
-            {
-                // These act like masking
-                builder.setWriteMaskState(RenderStateShard.COLOR_WRITE);
-                builder.setDepthTestState(Material.LESSTHAN);
-            }
-            // Otheerwise disable culling entirely
-            else builder.setCullState(RenderStateShard.NO_CULL);
-
-            final RenderType.CompositeState rendertype$state = builder.createCompositeState(true);
-            type = RenderType.create(id, DefaultVertexFormat.NEW_ENTITY, VertexFormat.Mode.TRIANGLES, 256, true, false,
-                    rendertype$state);
+            // These act like masking
+            builder.setWriteMaskState(RenderStateShard.COLOR_WRITE);
+            builder.setDepthTestState(Material.LESSTHAN);
         }
+        // Otheerwise disable culling entirely
+        else builder.setCullState(RenderStateShard.NO_CULL);
+
+        final RenderType.CompositeState rendertype$state = builder.createCompositeState(true);
+        type = RenderType.create(id, DefaultVertexFormat.NEW_ENTITY, mode, 256, true, false, rendertype$state);
 
         this.types.put(tex, type);
         return type;
@@ -132,8 +148,13 @@ public class Material
 
     public VertexConsumer preRender(final PoseStack mat, final VertexConsumer buffer)
     {
+        return preRender(mat, buffer, Mode.TRIANGLES);
+    }
+
+    public VertexConsumer preRender(final PoseStack mat, final VertexConsumer buffer, Mode mode)
+    {
         if (this.tex == null || Material.lastImpl == null) return buffer;
-        final RenderType type = this.makeRenderType(this.tex);
+        final RenderType type = this.makeRenderType(this.tex, mode);
         VertexConsumer newBuffer = Material.lastImpl.getBuffer(type);
         return newBuffer;
     }
