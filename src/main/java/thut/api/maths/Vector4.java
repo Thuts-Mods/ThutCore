@@ -35,6 +35,14 @@ public class Vector4
         this.quat = quat;
     }
 
+    @OnlyIn(value = Dist.CLIENT)
+    public Vector4 set(final Quaternion quat)
+    {
+        this.set(quat.i(), quat.j(), quat.k(), quat.r());
+        this.quat = quat;
+        return this;
+    }
+
     public Vector4(final CompoundTag nbt)
     {
         this();
@@ -108,12 +116,7 @@ public class Vector4
     @Override
     public boolean equals(final Object o)
     {
-        if (o instanceof Vector4)
-        {
-            final Vector4 v = (Vector4) o;
-            return v.x == this.x && v.y == this.y && v.z == this.z && v.w == this.w;
-        }
-
+        if (o instanceof Vector4 v) return v.x == this.x && v.y == this.y && v.z == this.z && v.w == this.w;
         return super.equals(o);
     }
 

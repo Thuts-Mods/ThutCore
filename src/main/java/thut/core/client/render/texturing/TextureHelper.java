@@ -29,6 +29,7 @@ import thut.core.client.render.texturing.states.RandomFixed;
 import thut.core.client.render.texturing.states.RandomState;
 import thut.core.client.render.texturing.states.Sequence;
 import thut.core.common.ThutCore;
+import thut.lib.RegHelper;
 
 public class TextureHelper implements IPartTexturer
 {
@@ -297,10 +298,10 @@ public class TextureHelper implements IPartTexturer
         this.mob = null;
         if (thing != null)
             this.mob = ((ICapabilityProvider) thing).getCapability(TextureHelper.CAPABILITY).orElse(null);
-        if (this.mob == null && thing instanceof Entity) this.mob = new IMobTexturable()
+        if (this.mob == null && thing instanceof Entity e) this.mob = new IMobTexturable()
         {
-            Entity entity = (Entity) thing;
-            String modid = this.entity.getType().getRegistryName().getNamespace();
+            Entity entity = e;
+            String modid = RegHelper.getKey(this.entity.getType()).getNamespace();
 
             Map<ResourceLocation, ResourceLocation> remapped = Maps.newHashMap();
 

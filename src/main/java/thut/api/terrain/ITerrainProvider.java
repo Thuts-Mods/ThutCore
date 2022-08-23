@@ -23,18 +23,12 @@ public interface ITerrainProvider
         int num;
 
         ChunkPos pos;
+        ChunkAccess chunk;
 
         public TerrainCache(final ChunkPos temp, final ChunkAccess chunk, final LevelAccessor world)
         {
             this.pos = temp;
-            for (int i = world.getMinSection(); i < world.getMaxSection(); i++)
-            {
-                final TerrainSegment seg = new TerrainSegment(temp.x, i, temp.z);
-                seg.chunk = chunk;
-                seg.real = false;
-                this.segMap.put(i, seg);
-                this.num++;
-            }
+            this.chunk = chunk;
         }
 
         public TerrainSegment remove(final int y)
@@ -50,9 +44,18 @@ public interface ITerrainProvider
             return this.num > 0;
         }
 
+        private TerrainSegment make(int y)
+        {
+            final TerrainSegment seg = new TerrainSegment(this.pos.x, y, this.pos.z);
+            seg.chunk = chunk;
+            seg.real = false;
+            this.num++;
+            return seg;
+        }
+
         public TerrainSegment get(final int y)
         {
-            return this.segMap.get(y);
+            return this.segMap.computeIfAbsent(y, this::make);
         }
     }
 
@@ -121,19 +124,16 @@ public interface ITerrainProvider
     }
 
     /**
-     * @param world
-     *            - world like object to look up for
-     * @param p
-     *            - position in block coordinates, not chunk coordinates
+     * @param world - world like object to look up for
+     * @param p     - position in block coordinates, not chunk coordinates
      * @return - a terrain segement for the given position
      */
     default TerrainSegment getTerrain(final LevelAccessor world, final BlockPos p)
     {
-        if (!(world instanceof Level)) return new TerrainSegment(p);
-        final Level rworld = (Level) world;
+        if (!(world instanceof Level level)) return new TerrainSegment(p);
         // Convert the pos to a chunk pos
         ChunkPos temp = null;
-        final ResourceKey<Level> dim = rworld.dimension();
+        final ResourceKey<Level> dim = level.dimension();
         final ChunkAccess chunk = world.isClientSide() ? world.getChunk(p)
                 : ITerrainProvider.getChunk(dim, temp = new ChunkPos(p));
         // final ChunkAccess chunk = world.getChunk(p);
@@ -157,8 +157,8 @@ public interface ITerrainProvider
             }
             return segs.get(y);
         }
-        final CapabilityTerrain.ITerrainProvider provider = ((ICapabilityProvider) chunk).getCapability(
-                ThutCaps.TERRAIN_PROVIDER).orElse(null);
+        final CapabilityTerrain.ITerrainProvider provider = ((ICapabilityProvider) chunk)
+                .getCapability(ThutCaps.TERRAIN_PROVIDER).orElse(null);
         provider.setChunk(chunk);
         return provider.getTerrainSegment(y);
     }

@@ -11,8 +11,7 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.apache.logging.log4j.core.appender.FileAppender;
 
-import com.google.common.collect.Maps;
-
+import it.unimi.dsi.fastutil.objects.Object2ObjectOpenHashMap;
 import net.minecraft.core.Registry;
 import net.minecraft.core.particles.ParticleType;
 import net.minecraft.network.syncher.EntityDataSerializers;
@@ -33,7 +32,6 @@ import net.minecraft.world.phys.Vec3;
 import net.minecraftforge.common.MinecraftForge;
 import net.minecraftforge.common.capabilities.RegisterCapabilitiesEvent;
 import net.minecraftforge.event.AttachCapabilitiesEvent;
-import net.minecraftforge.event.RegistryEvent;
 import net.minecraftforge.event.entity.player.PlayerInteractEvent.RightClickBlock;
 import net.minecraftforge.event.server.ServerAboutToStartEvent;
 import net.minecraftforge.eventbus.api.IEventBus;
@@ -45,6 +43,7 @@ import net.minecraftforge.fml.event.lifecycle.FMLCommonSetupEvent;
 import net.minecraftforge.fml.javafmlmod.FMLJavaModLoadingContext;
 import net.minecraftforge.fml.loading.FMLPaths;
 import net.minecraftforge.registries.DeferredRegister;
+import net.minecraftforge.registries.ForgeRegistries;
 import thut.api.AnimatedCaps;
 import thut.api.LinkableCaps;
 import thut.api.ThutCaps;
@@ -57,8 +56,6 @@ import thut.api.entity.ShearableCaps;
 import thut.api.entity.blockentity.BlockEntityBase;
 import thut.api.entity.blockentity.BlockEntityInventory;
 import thut.api.entity.blockentity.IBlockEntity;
-import thut.api.inventory.npc.NpcContainer;
-import thut.api.particle.ThutParticles;
 import thut.api.terrain.StructureManager;
 import thut.core.common.config.Config;
 import thut.core.common.handlers.ConfigHandler;
@@ -72,6 +69,7 @@ import thut.core.common.network.TerrainUpdate;
 import thut.core.common.network.TileUpdate;
 import thut.core.common.terrain.CapabilityTerrainAffected;
 import thut.core.common.world.mobs.data.PacketDataSync;
+import thut.core.init.RegistryObjects;
 import thut.crafts.ThutCrafts;
 
 @Mod(ThutCore.MODID)
@@ -179,28 +177,15 @@ public class ThutCore
                 .create(Registry.RECIPE_TYPE_REGISTRY, ThutCore.MODID);
         public static final DeferredRegister<LootItemFunctionType> LOOTTYPE = DeferredRegister
                 .create(Registry.LOOT_FUNCTION_REGISTRY, ThutCore.MODID);
+        public static final DeferredRegister<ParticleType<?>> PARTICLES = DeferredRegister
+                .create(ForgeRegistries.PARTICLE_TYPES, ThutCore.MODID);
+        public static final DeferredRegister<MenuType<?>> MENUS = DeferredRegister.create(ForgeRegistries.CONTAINERS,
+                ThutCore.MODID);
 
         @SubscribeEvent
         public static void registerCapabilities(final RegisterCapabilitiesEvent event)
         {
             ThutCaps.registerCapabilities(event);
-        }
-
-        @SubscribeEvent
-        public static void registerParticles(final RegistryEvent.Register<ParticleType<?>> event)
-        {
-            ThutCore.LOGGER.debug("Registering Particle Types");
-            event.getRegistry().register(ThutParticles.AURORA.setRegistryName(ThutCore.MODID, "aurora"));
-            event.getRegistry().register(ThutParticles.LEAF.setRegistryName(ThutCore.MODID, "leaf"));
-            event.getRegistry().register(ThutParticles.MISC.setRegistryName(ThutCore.MODID, "misc"));
-            event.getRegistry().register(ThutParticles.STRING.setRegistryName(ThutCore.MODID, "string"));
-            event.getRegistry().register(ThutParticles.POWDER.setRegistryName(ThutCore.MODID, "powder"));
-        }
-
-        @SubscribeEvent
-        public static void registerContainers(final RegistryEvent.Register<MenuType<?>> event)
-        {
-            event.getRegistry().register(NpcContainer.TYPE.setRegistryName(ThutCore.MODID, "npc"));
         }
     }
 
@@ -231,12 +216,16 @@ public class ThutCore
         }
     };
 
-    private static Map<String, String> trimmed = Maps.newConcurrentMap();
+    private static Map<String, String> trimmed = new Object2ObjectOpenHashMap<String, String>();
 
-    public static String trim(final String name)
+    public static synchronized String trim(final String name)
     {
         if (name == null) return null;
-        if (ThutCore.trimmed.containsKey(name)) return ThutCore.trimmed.get(name);
+        return trimmed.computeIfAbsent(name, ThutCore::_trim);
+    }
+
+    private static String _trim(String name)
+    {
         String trim = name;
         // ROOT locale to prevent issues with turkish letters.
         trim = trim.toLowerCase(Locale.ROOT).trim();
@@ -244,7 +233,6 @@ public class ThutCore
         trim = trim.replaceAll("([^a-zA-Z0-9 _-])", "");
         // Replace these too.
         trim = trim.replaceAll(" ", "_");
-        ThutCore.trimmed.put(name, trim);
         return trim;
     }
 
@@ -274,6 +262,8 @@ public class ThutCore
 
         RegistryEvents.LOOTTYPE.register(modEventBus);
         RegistryEvents.RECIPETYPE.register(modEventBus);
+        RegistryEvents.MENUS.register(modEventBus);
+        RegistryEvents.PARTICLES.register(modEventBus);
 
         // Register ourselves for server and other game events we are interested
         // in
@@ -281,6 +271,7 @@ public class ThutCore
 
         Tracker.init();
         LootLayerFunction.init();
+        RegistryObjects.init();
 
         // Register Config stuff
         Config.setupConfigs(ThutCore.conf, ThutCore.MODID, ThutCore.MODID);
@@ -305,7 +296,7 @@ public class ThutCore
     {
         ThutCore.LOGGER.info("Setup");
 
-        if (ThutCore.THUTICON.isEmpty()) ThutCore.THUTICON = new ItemStack(ThutCrafts.CRAFTMAKER);
+        if (ThutCore.THUTICON.isEmpty()) ThutCore.THUTICON = new ItemStack(ThutCrafts.CRAFTMAKER.get());
 
         // Register the actual packets
         ThutCore.packets.registerMessage(EntityUpdate.class, EntityUpdate::new);

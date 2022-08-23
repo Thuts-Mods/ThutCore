@@ -93,11 +93,10 @@ public class TerrainSegment
                     }
                 }
                 // Check nearby villages, and if in one, define as village type.
-                if (world instanceof ServerLevel)
+                if (world instanceof ServerLevel level)
                 {
                     final BlockPos pos = v.getPos();
-                    final ServerLevel server = (ServerLevel) world;
-                    if (server.isVillage(pos)) biome = BiomeType.VILLAGE;
+                    if (level.isVillage(pos)) biome = BiomeType.VILLAGE;
                 }
 
                 return biome;
@@ -240,7 +239,7 @@ public class TerrainSegment
             biomes[i] = t.idReplacements.get(biomes[i]);
             replacements = true;
         }
-        if (replacements)
+        if (replacements && ThutCore.conf.debug)
             ThutCore.LOGGER.info("Replacement subbiomes found for " + t.chunkX + " " + t.chunkY + " " + t.chunkZ);
         t.setBiomes(biomes);
     }
@@ -338,8 +337,8 @@ public class TerrainSegment
     public boolean equals(final Object o)
     {
         boolean ret = false;
-        if (o instanceof TerrainSegment) ret = ((TerrainSegment) o).chunkX == this.chunkX
-                && ((TerrainSegment) o).chunkY == this.chunkY && ((TerrainSegment) o).chunkZ == this.chunkZ;
+        if (o instanceof TerrainSegment seg)
+            ret = seg.chunkX == this.chunkX && seg.chunkY == this.chunkY && seg.chunkZ == this.chunkZ;
         return ret;
     }
 

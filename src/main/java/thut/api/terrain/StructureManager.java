@@ -11,6 +11,7 @@ import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 
 import net.minecraft.core.BlockPos;
+import net.minecraft.core.BlockPos.MutableBlockPos;
 import net.minecraft.core.Registry;
 import net.minecraft.core.RegistryAccess;
 import net.minecraft.core.SectionPos;
@@ -86,12 +87,13 @@ public class StructureManager
             final int x1 = pos.getX();
             final int y1 = pos.getY();
             final int z1 = pos.getZ();
+            MutableBlockPos mpos = new MutableBlockPos();
             for (int x = x1; x < x1 + TerrainSegment.GRIDSIZE; x++)
                 for (int y = y1; y < y1 + TerrainSegment.GRIDSIZE; y++)
                     for (int z = z1; z < z1 + TerrainSegment.GRIDSIZE; z++)
             {
-                pos = new BlockPos(x, y, z);
-                if (b.isInside(pos)) return true;
+                mpos.set(x, y, z);
+                if (b.isInside(mpos)) return true;
             }
             return false;
         }
@@ -161,14 +163,12 @@ public class StructureManager
 
     public static Set<StructureInfo> getFor(final ServerLevel dim, final BlockPos loc)
     {
-        final Set<StructureInfo> matches = Sets.newHashSet();
-        return matches;
+        return getFor(dim.dimension(), loc);
     }
 
     public static Set<StructureInfo> getNear(final ServerLevel dim, final BlockPos loc, int distance)
     {
-        final Set<StructureInfo> matches = Sets.newHashSet();
-        return matches;
+        return getNear(dim.dimension(), loc, distance);
     }
 
     private static Set<StructureInfo> getNearInt(final ResourceKey<Level> dim, final BlockPos loc, final ChunkPos pos,
