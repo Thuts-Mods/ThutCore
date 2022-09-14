@@ -4,6 +4,9 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.function.Predicate;
+
+import javax.annotation.Nullable;
 
 import com.google.common.collect.Sets;
 import com.mojang.blaze3d.vertex.PoseStack;
@@ -64,13 +67,20 @@ public interface IExtendedModelPart extends IModelCustom
 
     default void preProcess()
     {
-        for (final IExtendedModelPart o : this.getSubParts().values()) o.preProcess();
-        IExtendedModelPart parent = this.getParent();
+        var parent = this.getParent();
+        var child = this;
+        child.getRecursiveChildNames().addAll(this.getSubParts().keySet());
+        String name = child.getName();
         while (parent != null)
         {
             this.getParentNames().add(parent.getName());
+            parent.getRecursiveChildNames().add(name);
+            parent.getRecursiveChildNames().addAll(child.getRecursiveChildNames());
+            child = parent;
+            name = child.getName();
             parent = parent.getParent();
         }
+        for (final IExtendedModelPart o : this.getSubParts().values()) o.preProcess();
     }
 
     default void sort(final List<String> order)
@@ -99,8 +109,6 @@ public interface IExtendedModelPart extends IModelCustom
     String getName();
 
     IExtendedModelPart getParent();
-
-    int[] getRGBABrO();
 
     <T extends IExtendedModelPart> HashMap<String, T> getSubParts();
 
@@ -135,6 +143,11 @@ public interface IExtendedModelPart extends IModelCustom
         return Sets.newHashSet();
     }
 
+    default Set<String> getRecursiveChildNames()
+    {
+        return Sets.newHashSet();
+    }
+
     void setAnimationHolder(IAnimationHolder holder);
 
     IAnimationHolder getAnimationHolder();
@@ -151,5 +164,21 @@ public interface IExtendedModelPart extends IModelCustom
 
     void setPreTranslations(Vector3 translations);
 
-    void setRGBABrO(int r, int g, int b, int a, int br, int o);
+    /**
+     * Sets the colour for this part
+     * 
+     * @param material - predicate to check if material is valid
+     * @param r
+     * @param g
+     * @param b
+     * @param a
+     * @param br
+     * @param o
+     */
+    void setRGBABrO(@Nullable Predicate<Material> material, int r, int g, int b, int a, int br, int o);
+
+    default void setRGBABrO(int r, int g, int b, int a, int br, int o)
+    {
+        setRGBABrO(m -> true, r, g, b, a, br, o);
+    }
 }

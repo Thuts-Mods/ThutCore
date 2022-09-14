@@ -1,4 +1,4 @@
-package thut.core.client.render.json;
+package thut.core.client.render.bbmodel;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -9,10 +9,11 @@ import com.google.common.collect.Maps;
 import com.mojang.math.Quaternion;
 
 import net.minecraft.core.Direction;
-import net.minecraft.resources.ResourceLocation;
 import thut.api.maths.Vector4;
-import thut.core.client.render.json.JsonTemplate.JsonBlock;
-import thut.core.client.render.json.JsonTemplate.JsonFace;
+import thut.core.client.render.bbmodel.BBModelTemplate.Element;
+import thut.core.client.render.bbmodel.BBModelTemplate.JsonFace;
+import thut.core.client.render.bbmodel.BBModelTemplate.JsonGroup;
+import thut.core.client.render.json.JsonMesh;
 import thut.core.client.render.model.Vertex;
 import thut.core.client.render.model.parts.Material;
 import thut.core.client.render.model.parts.Mesh;
@@ -20,61 +21,63 @@ import thut.core.client.render.model.parts.Part;
 import thut.core.client.render.texturing.TextureCoordinate;
 import thut.core.common.ThutCore;
 
-public class JsonPart extends Part
+public class BBModelPart extends Part
 {
 
-    public static List<JsonPart> makeParts(JsonTemplate t, JsonBlock b, int index)
+    public static void makeParts(BBModelTemplate t, JsonGroup group, List<BBModelPart> parts,
+            List<BBModelPart> children, float[] offsets)
     {
-        final List<JsonPart> parts = new ArrayList<>();
-        float[] offsets;
-
-        if (b.rotation == null) offsets = new float[]
-        { 0, 0, 0 };
-        else offsets = b.rotation.origin.clone();
-
-        List<Mesh> shapes = makeShapes(t, b, offsets);
-        JsonPart root = make(shapes.get(0), b.name + "_" + index, b, index);
-        parts.add(root);
-        if (shapes.size() > 1)
+        children.clear();
+        int i = 0;
+        List<BBModelPart> ours = new ArrayList<>();
+        BBModelPart root = null;
+        // Handle parts first
+        for (Object o : group.children)
         {
-            int i = 0;
-            for (Mesh s : shapes)
+            if (o instanceof Element b)
             {
-                JsonPart part = make(s, b.name + "_" + index + "_" + i++, b, index);
+                String name = i == 0 ? group.name : group.name + "_" + i;
+                float[] use = group.origin;
+                List<Mesh> shapes = makeShapes(t, b, use);
+                BBModelPart part = make(shapes, name, b, i, offsets);
+                if (root == null) root = part;
                 parts.add(part);
+                ours.add(part);
+                i++;
             }
         }
-        return parts;
+
+        offsets[0] = -group.origin[0];
+        offsets[2] = -group.origin[2];
+        offsets[1] = -group.origin[1];
+        // then handle groups
+        for (Object o : group.children)
+        {
+            if (o instanceof JsonGroup g)
+            {
+                makeParts(t, g, parts, children, offsets.clone());
+                if (root != null) children.forEach(root::addChild);
+            }
+        }
+        children.clear();
+        children.addAll(ours);
     }
 
-    private static JsonPart make(Mesh mesh, String name, JsonBlock b, int index)
+    private static BBModelPart make(List<Mesh> shapes, String name, Element b, int index, float[] offsets2)
     {
-        JsonPart part = new JsonPart(name);
+        BBModelPart part = new BBModelPart(name);
         part.index = index;
-        part.addShape(mesh);
-        float[] offsets = b.from.clone();
+        shapes.forEach(part::addShape);
+        float[] offsets = b.origin.clone();
 
+        offsets[0] += offsets2[0];
+        offsets[1] += offsets2[1];
+        offsets[2] += offsets2[2];
         if (b.rotation != null)
         {
-            offsets[0] -= b.rotation.origin[0];
-            offsets[1] -= b.rotation.origin[1];
-            offsets[2] -= b.rotation.origin[2];
-
-            float x = 0;
-            float y = 0;
-            float z = 0;
-            if (b.rotation.axis.equals("x"))
-            {
-                x = b.rotation.angle;
-            }
-            if (b.rotation.axis.equals("y"))
-            {
-                y = b.rotation.angle;
-            }
-            if (b.rotation.axis.equals("z"))
-            {
-                z = b.rotation.angle;
-            }
+            float x = b.rotation[0];
+            float y = b.rotation[2];
+            float z = b.rotation[1];
             Quaternion quat = new Quaternion(x, y, z, true);
             final Vector4 rotations = new Vector4(quat);
             part.rotations.set(rotations.x, rotations.y, rotations.z, rotations.w);
@@ -82,18 +85,24 @@ public class JsonPart extends Part
         offsets[0] /= 16;
         offsets[1] /= 16;
         offsets[2] /= 16;
-        part.offset.set(offsets);
+
+        float[] use = offsets.clone();
+        use[0] = -offsets[0];
+        use[1] = -offsets[2];
+        use[2] = offsets[1];
+
+        part.offset.set(use);
         return part;
     }
 
-    private static void addFace(Map<String, List<List<Object>>> materials, JsonTemplate template, JsonBlock b,
+    private static void addFace(Map<String, List<List<Object>>> materials, BBModelTemplate template, Element b,
             JsonFace face, Direction dir, float[] offsets)
     {
         if (face == null || b == null) return;
         List<Object> order = Lists.newArrayList();
         List<Object> verts = Lists.newArrayList();
         List<Object> tex = Lists.newArrayList();
-        String material = face.texture;
+        String material = template.textures.get(face.texture).name;
         if (materials.containsKey(material))
         {
             List<List<Object>> lists = materials.get(material);
@@ -109,22 +118,13 @@ public class JsonPart extends Part
         float[] from = b.from.clone();
         float[] to = b.to.clone();
 
-        from[0] -= b.from[0];
-        from[1] -= b.from[1];
-        from[2] -= b.from[2];
-        to[0] -= b.from[0];
-        to[1] -= b.from[1];
-        to[2] -= b.from[2];
+        from[0] -= offsets[0];
+        from[1] -= offsets[1];
+        from[2] -= offsets[2];
 
-        if (b.rotation != null)
-        {
-            from[0] += b.rotation.origin[0];
-            from[1] += b.rotation.origin[1];
-            from[2] += b.rotation.origin[2];
-            to[0] += b.rotation.origin[0];
-            to[1] += b.rotation.origin[1];
-            to[2] += b.rotation.origin[2];
-        }
+        to[0] -= offsets[0];
+        to[1] -= offsets[1];
+        to[2] -= offsets[2];
 
         float[][] coords = new float[4][3];
 
@@ -185,7 +185,6 @@ public class JsonPart extends Part
             coords[3][0] = to[0];
             break;
         case WEST:
-
             coords[0][1] = to[1];
             coords[0][2] = from[2];
 
@@ -223,7 +222,6 @@ public class JsonPart extends Part
             coords[3][2] = from[2];
             break;
         case SOUTH:
-
             coords[0][1] = to[1];
             coords[0][0] = from[0];
 
@@ -252,13 +250,13 @@ public class JsonPart extends Part
                 { 2, 3 },
                 { 2, 1 } };
 
-        float us = 16f;
-        float vs = 16f;
+        float us = template.resolution.width;
+        float vs = template.resolution.height;
 
         for (int i = 0; i < 4; i++)
         {
             float[] c = coords[i];
-            Vertex v = new Vertex(c[0] / 16f, c[1] / 16f, c[2] / 16f);
+            Vertex v = new Vertex(c[0] / 16f, -c[2] / 16f, c[1] / 16f);
             Integer o = order.size();
             int u0 = tex_order[i][0];
             int v0 = tex_order[i][1];
@@ -269,7 +267,7 @@ public class JsonPart extends Part
         }
     }
 
-    private static List<Mesh> makeShapes(JsonTemplate t, JsonBlock b, float[] offsets)
+    private static List<Mesh> makeShapes(BBModelTemplate t, Element b, float[] offsets)
     {
         List<Mesh> shapes = new ArrayList<>();
 
@@ -297,28 +295,9 @@ public class JsonPart extends Part
             List<Object> tex = lists.get(2);
             Mesh m = new JsonMesh(order.toArray(new Integer[0]), verts.toArray(new Vertex[0]),
                     tex.toArray(new TextureCoordinate[0]));
-            m.name = key;
-            Material mat = new Material(key);
+            m.name = ThutCore.trim(key);
+            Material mat = new Material(m.name);
             m.setMaterial(mat);
-
-            if (t.textures != null && key.contains("#") && t.textures.has(key = key.replace("#", "")))
-            {
-                try
-                {
-                    String texture = t.textures.get(key).getAsString();
-                    mat.tex = new ResourceLocation(texture);
-                    if (!mat.tex.toString().contains("textures/"))
-                        mat.tex = new ResourceLocation(mat.tex.getNamespace(), "textures/" + mat.tex.getPath());
-                    if (!mat.tex.toString().contains(".png"))
-                        mat.tex = new ResourceLocation(mat.tex.getNamespace(), mat.tex.getPath() + ".png");
-                }
-                catch (Exception e)
-                {
-                    ThutCore.LOGGER.error("Error loading Json Model Texture!", e);
-                    ThutCore.LOGGER.error(t.textures);
-                    ThutCore.LOGGER.error(key);
-                }
-            }
             shapes.add(m);
         });
         return shapes;
@@ -326,7 +305,7 @@ public class JsonPart extends Part
 
     public int index = 0;
 
-    public JsonPart(String name)
+    public BBModelPart(String name)
     {
         super(name + "");
     }

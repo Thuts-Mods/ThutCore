@@ -13,9 +13,11 @@ import com.mojang.math.Vector3f;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.screens.MenuScreens;
 import net.minecraft.client.gui.screens.Screen;
+import net.minecraft.client.model.EntityModel;
 import net.minecraft.client.renderer.LevelRenderer;
 import net.minecraft.client.renderer.MultiBufferSource;
 import net.minecraft.client.renderer.RenderType;
+import net.minecraft.client.renderer.entity.LivingEntityRenderer;
 import net.minecraft.client.resources.language.I18n;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Holder;
@@ -53,6 +55,7 @@ import thut.api.terrain.TerrainManager;
 import thut.api.terrain.TerrainSegment;
 import thut.core.client.gui.NpcScreen;
 import thut.core.client.render.particle.ParticleFactories;
+import thut.core.client.render.wrappers.ModelWrapper;
 import thut.core.common.ThutCore;
 
 @Mod.EventBusSubscriber(bus = Mod.EventBusSubscriber.Bus.FORGE, value = Dist.CLIENT)
@@ -162,6 +165,14 @@ public class ClientInit
             event.getRenderer().entityRenderDispatcher.setRenderShadow(backup);
             event.setCanceled(true);
         }
+
+        @SuppressWarnings("unchecked")
+        var renderer = (LivingEntityRenderer<LivingEntity, EntityModel<LivingEntity>>) event.getRenderer();
+        if (renderer.getModel() instanceof ModelWrapper<LivingEntity> wrap)
+        {
+            var tex = renderer.getTextureLocation(living);
+            wrap.setMob(living, event.getMultiBufferSource(), tex);
+        }
     }
 
     @SubscribeEvent(priority = EventPriority.HIGHEST)
@@ -173,18 +184,17 @@ public class ClientInit
     }
 
     @SubscribeEvent
-    public static void RenderBounds(final RenderLevelStageEvent event)
+    public static void renderBounds(final RenderLevelStageEvent event)
     {
-        if (event.getStage() != Stage.AFTER_TRANSLUCENT_BLOCKS) return;
+        if (event.getStage() != Stage.AFTER_SOLID_BLOCKS) return;
 
         ItemStack held;
         final Player player = Minecraft.getInstance().player;
         if (!(held = player.getMainHandItem()).isEmpty() || !(held = player.getOffhandItem()).isEmpty())
         {
-            if (ClientInit.getSubbiome(held) == null) return;
-            if (held.getTag() != null && held.getTag().contains("min"))
+            final Minecraft mc = Minecraft.getInstance();
+            if (ClientInit.getSubbiome(held) != null && held.getTag() != null && held.getTag().contains("min"))
             {
-                final Minecraft mc = Minecraft.getInstance();
                 final Vec3 projectedView = mc.gameRenderer.getMainCamera().getPosition();
                 Vec3 pointed = new Vec3(projectedView.x, projectedView.y, projectedView.z)
                         .add(mc.player.getViewVector(event.getPartialTick()));
@@ -217,7 +227,6 @@ public class ClientInit
                 LevelRenderer.renderLineBox(matrix, builder, box, 1.0F, 0.0F, 0.0F, 1.0F);
                 matrix.popPose();
                 buffer.endBatch(RenderType.LINES);
-
             }
         }
     }

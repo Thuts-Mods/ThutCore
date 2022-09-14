@@ -41,6 +41,7 @@ import thut.core.client.render.model.IModelRenderer.Vector5;
 import thut.core.client.render.model.ModelFactory;
 import thut.core.client.render.texturing.IPartTexturer;
 import thut.core.client.render.texturing.IRetexturableModel;
+import thut.core.client.render.texturing.TextureHelper;
 import thut.core.common.ThutCore;
 import thut.core.common.mobs.DefaultColourable;
 
@@ -63,6 +64,7 @@ public class ModelWrapper<T extends Entity> extends EntityModel<T> implements IM
     protected float rotateAngleX = 0, rotateAngleY = 0, rotateAngleZ = 0, rotateAngle = 0;
 
     public long lastInit = -1;
+    public boolean debugMode = false;
 
     private final int[] tmp = new int[4];
 
@@ -129,6 +131,7 @@ public class ModelWrapper<T extends Entity> extends EntityModel<T> implements IM
 
     private void initColours(final IExtendedModelPart parent, final T entity, final int brightness, final int overlay)
     {
+        if (debugMode) return;
         int red = 255, green = 255, blue = 255;
         int alpha = 255;
         final IMobColourable poke = entity == null ? null
@@ -201,7 +204,7 @@ public class ModelWrapper<T extends Entity> extends EntityModel<T> implements IM
             if (part.isHidden())
             {
                 excluded.add(partName);
-                excluded.addAll(part.getRenderOrder());
+                excluded.addAll(part.getRecursiveChildNames());
             }
             if (part.getParent() == null)
             {
@@ -236,17 +239,23 @@ public class ModelWrapper<T extends Entity> extends EntityModel<T> implements IM
         mat.mulPose(new Quaternion(axis, this.rotateAngle, true));
     }
 
-    public void setMob(final T entity, final MultiBufferSource bufferIn, final ResourceLocation default_)
+    public void setMob(final T entity, final MultiBufferSource bufferIn, ResourceLocation default_)
     {
-        final IPartTexturer texer = this.renderer.getTexturer();
-        if (texer != null)
+        Object lock = this.imodel == null ? this.renderer : this.imodel;
+        synchronized (lock)
         {
-            texer.bindObject(entity);
-            this.getParts().forEach((n, p) -> {
-                p.applyTexture(bufferIn, default_, texer);
-            });
+            final IPartTexturer texer = this.renderer.getTexturer();
+            if (texer != null)
+            {
+                texer.bindObject(entity);
+                if (texer instanceof TextureHelper helper) default_ = helper.default_tex;
+                ResourceLocation defs = default_;
+                this.getParts().forEach((n, p) -> {
+                    p.applyTexture(bufferIn, defs, texer);
+                });
+            }
+            this.setEntity(entity);
         }
-        this.setEntity(entity);
     }
 
     /**

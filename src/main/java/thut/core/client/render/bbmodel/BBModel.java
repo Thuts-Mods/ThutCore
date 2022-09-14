@@ -1,31 +1,30 @@
-package thut.core.client.render.json;
+package thut.core.client.render.bbmodel;
 
 import java.io.BufferedReader;
 import java.io.FileNotFoundException;
+import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
-import java.util.Map;
 
 import com.google.common.collect.Lists;
-import com.google.common.collect.Maps;
 
 import net.minecraft.client.Minecraft;
 import net.minecraft.resources.ResourceLocation;
 import thut.api.entity.animation.Animation;
 import thut.api.util.JsonUtil;
-import thut.core.client.render.json.JsonTemplate.JsonBlock;
+import thut.core.client.render.bbmodel.BBModelTemplate.JsonGroup;
 import thut.core.client.render.model.BaseModel;
 import thut.core.common.ThutCore;
 import thut.lib.ResourceHelper;
 
-public class JsonModel extends BaseModel
+public class BBModel extends BaseModel
 {
-    public JsonModel()
+    public BBModel()
     {
         super();
     }
 
-    public JsonModel(final ResourceLocation l)
+    public BBModel(final ResourceLocation l)
     {
         super(l);
     }
@@ -42,7 +41,7 @@ public class JsonModel extends BaseModel
                 this.valid = false;
                 return;
             }
-            JsonTemplate t = JsonUtil.gson.fromJson(reader, JsonTemplate.class);
+            BBModelTemplate t = JsonUtil.gson.fromJson(reader, BBModelTemplate.class);
             reader.close();
             t.init();
             this.makeObjects(t);
@@ -54,22 +53,18 @@ public class JsonModel extends BaseModel
         }
     }
 
-    private void makeObjects(JsonTemplate t)
+    private void makeObjects(BBModelTemplate t)
     {
-        List<JsonPart> parts = Lists.newArrayList();
-        Map<Integer, List<JsonPart>> byIndex = Maps.newHashMap();
-        for (int i = 0; i < t.elements.size(); i++)
+        List<BBModelPart> parts = Lists.newArrayList();
+        for (int i = 0; i < t.outliner.size(); i++)
         {
-            JsonBlock b = t.elements.get(i);
-            parts.addAll(JsonPart.makeParts(t, b, i));
+            JsonGroup b = t.outliner.get(i);
+            float[] offset =  new float[] {0,0,0};
+            BBModelPart.makeParts(t, b, parts, new ArrayList<>(),offset);
         }
-        for (JsonPart p : parts)
+        for (BBModelPart p : parts)
         {
             this.parts.put(p.getName(), p);
-            List<JsonPart> bit = Lists.newArrayList();
-            if (byIndex.containsKey(p.index)) bit = byIndex.get(p.index);
-            else byIndex.put(p.index, bit);
-            bit.add(p);
         }
     }
 

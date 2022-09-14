@@ -45,14 +45,17 @@ public abstract class BaseModel implements IModelCustom, IModel, IRetexturableMo
         @Override
         public void run()
         {
+            // Load the model possibly async, this should be most of the time.
             this.toLoad.loadModel(this.res);
-            // Flag as loaded before running the callback
-            this.toLoad.loaded = true;
             synchronized (this.toLoad)
             {
+                // Flag as loaded before running the callback
+                this.toLoad.loaded = true;
+                // Then if we have a callback, run that
                 if (this.toLoad.callback != null) this.toLoad.callback.run(this.toLoad);
+                // Then clear the callback
+                this.toLoad.callback = null;
             }
-            this.toLoad.callback = null;
         }
 
         public void start()
@@ -133,7 +136,7 @@ public abstract class BaseModel implements IModelCustom, IModel, IRetexturableMo
     @Override
     public List<String> getRenderOrder()
     {
-        if (this.order.isEmpty() && this.loaded)
+        if ((this.order.isEmpty()) && this.loaded)
         {
             if (this.callback != null) this.callback.run(this);
             this.callback = null;
@@ -271,7 +274,7 @@ public abstract class BaseModel implements IModelCustom, IModel, IRetexturableMo
         }
         else if (anim) anims.addAll(renderer.getAnimations().get(currentPhase));
 
-        if (anim) AnimationHelper.doAnimation(anims, entity, parent.getName(), parent, partialTick, limbSwing);
+        if (anim) AnimationHelper.doAnimation(anims, entity, parent, partialTick, limbSwing);
         if (this.isHead(parent.getName()))
         {
             float ang;

@@ -16,19 +16,23 @@ import thut.core.client.render.texturing.TextureCoordinate;
 
 public abstract class Mesh
 {
+    public static boolean debug = false;
+
     protected final boolean hasTextures;
     public Vertex[] vertices;
     public Vertex[] normals;
     public TextureCoordinate[] textureCoordinates;
     public Integer[] order;
-    public int[] rgbabro;
     Material material;
     public String name;
+    public boolean overrideColour = false;
     private final double[] uvShift =
     { 0, 0 };
     final int GL_FORMAT;
     final Vertex[] normalList;
     Vector4f centre = new Vector4f();
+
+    public int[] rgbabro = new int[6];
 
     private boolean same_mat = false;
 
@@ -112,12 +116,23 @@ public abstract class Mesh
 
         TextureCoordinate textureCoordinate = dummyTex;
         final boolean flat = this.material.flat;
-        final float red = this.rgbabro[0] / 255f;
-        final float green = this.rgbabro[1] / 255f;
-        final float blue = this.rgbabro[2] / 255f;
-        final float alpha = this.material.alpha * this.rgbabro[3] / 255f;
-        final int lightmapUV = this.rgbabro[4];
-        final int overlayUV = this.rgbabro[5];
+        float red = material.rgbabro[0] / 255f;
+        float green = material.rgbabro[1] / 255f;
+        float blue = material.rgbabro[2] / 255f;
+        float alpha = this.material.alpha * material.rgbabro[3] / 255f;
+        int lightmapUV = material.rgbabro[4];
+        int overlayUV = material.rgbabro[5];
+
+        if (debug || overrideColour)
+        {
+            red = this.rgbabro[0] / 255f;
+            green = this.rgbabro[1] / 255f;
+            blue = this.rgbabro[2] / 255f;
+            alpha = this.material.alpha * this.rgbabro[3] / 255f;
+            lightmapUV = this.rgbabro[4];
+            overlayUV = this.rgbabro[5];
+        }
+
         final PoseStack.Pose matrixstack$entry = mat.last();
         final Matrix4f pos = matrixstack$entry.pose();
         final Matrix3f norms = matrixstack$entry.normal();
@@ -128,14 +143,14 @@ public abstract class Mesh
 
         com.mojang.math.Vector3f camera_view = com.mojang.math.Vector3f.ZP;
 
-        boolean cull = material.cull && alpha >= 1;
+        boolean cull = material.cull && alpha >= 1 && !material.transluscent;
 
         if (cull)
         {
             dp.set(centre.x(), centre.y(), centre.z(), 1);
             dp.transform(pos);
             double dr2 = Math.abs(dp.dot(METRIC));
-            if (dr2 < CULLTHRESHOLD)
+            if (dr2 < CULLTHRESHOLD || dr2 > 6e2)
             {
                 cull = false;
             }
@@ -208,14 +223,14 @@ public abstract class Mesh
             texturer.shiftUVs(this.material.name, this.uvShift);
             if (texturer.isHidden(this.material.name)) return;
             if (!same_mat && texturer.isHidden(this.name)) return;
-            texturer.modifiyRGBA(this.material.name, this.rgbabro);
-            if (!same_mat) texturer.modifiyRGBA(this.name, this.rgbabro);
+            texturer.modifiyRGBA(this.material.name, material.rgbabro);
+            if (!same_mat) texturer.modifiyRGBA(this.name, material.rgbabro);
         }
         buffer = this.material.preRender(mat, buffer, this.vertexMode);
         if (this.material.emissiveMagnitude > 0)
         {
             final int j = (int) (this.material.emissiveMagnitude * 15);
-            this.rgbabro[4] = j << 20 | j << 4;
+            material.rgbabro[4] = j << 20 | j << 4;
         }
         this.doRender(mat, buffer, texturer);
     }

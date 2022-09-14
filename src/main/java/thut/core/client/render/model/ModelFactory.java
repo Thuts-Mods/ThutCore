@@ -9,10 +9,10 @@ import com.google.common.collect.Maps;
 
 import net.minecraft.resources.ResourceLocation;
 import thut.api.ModelHolder;
+import thut.core.client.render.animation.AnimationLoader;
+import thut.core.client.render.bbmodel.BBModel;
 import thut.core.client.render.json.JsonModel;
-import thut.core.client.render.mca.McaModel;
 import thut.core.client.render.model.IModel.IModelCallback;
-import thut.core.client.render.obj.ObjModel;
 import thut.core.client.render.x3d.X3dModel;
 import thut.core.common.ThutCore;
 
@@ -28,10 +28,9 @@ public class ModelFactory
 
     static
     {
-        ModelFactory.registerIModel("x3d", X3dModel::new);
+        ModelFactory.registerIModel("bbmodel", BBModel::new);
         ModelFactory.registerIModel("json", JsonModel::new);
-        ModelFactory.registerIModel("mca", McaModel::new);
-        ModelFactory.registerIModel("obj", ObjModel::new);
+        ModelFactory.registerIModel("x3d", X3dModel::new);
     }
 
     public static IModel create(final ResourceLocation location, final ModelHolder model, final IModelCallback callback)
@@ -83,7 +82,9 @@ public class ModelFactory
 
     public static IModel create(final ModelHolder model)
     {
-        return ModelFactory.create(model, m -> {});
+        return ModelFactory.create(model, m -> {
+            AnimationLoader.parse(model, m, null);
+        });
     }
 
     public static Set<String> getValidExtensions()
