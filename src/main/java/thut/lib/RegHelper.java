@@ -8,40 +8,35 @@ import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.biome.Biome;
 import net.minecraft.world.level.block.Block;
+import net.minecraftforge.registries.ForgeRegistries;
+import net.minecraftforge.registries.ForgeRegistries.Keys;
+import net.minecraftforge.server.ServerLifecycleHooks;
 
 public class RegHelper
 {
     public static ResourceLocation getKey(EntityType<?> type)
     {
-        return type.getRegistryName();
-        // 1.19 will require the below option instead.
-        // return ForgeRegistries.ENTITIES.getKey(type);
+         return ForgeRegistries.ENTITY_TYPES.getKey(type);
     }
 
     public static ResourceLocation getKey(Block type)
     {
-        return type.getRegistryName();
-        // 1.19 will require the below option instead.
-        // return Registry.BLOCK.getKey(type);
+         return ForgeRegistries.BLOCKS.getKey(type);
     }
 
     public static ResourceLocation getKey(Item type)
     {
-        return type.getRegistryName();
-        // 1.19 will require the below option instead.
-        // return Registry.ITEM.getKey(type);
+         return ForgeRegistries.ITEMS.getKey(type);
     }
     
     public static ResourceLocation getKey(ParticleType<?> partice)
     {
-        return partice.getRegistryName();
-        // 1.19 will require the below option instead.
-        // return ForgeRegistries.PARTICLE_TYPES.getKey(type);
+        return ForgeRegistries.PARTICLE_TYPES.getKey(partice);
     }
 
     public static ResourceLocation getKey(Biome biome)
     {
-        return biome.getRegistryName();
+        return ServerLifecycleHooks.getCurrentServer().registryAccess().registryOrThrow(Keys.BIOMES).getKey(biome);
     }
 
     public static ResourceLocation getKey(ItemStack stack)

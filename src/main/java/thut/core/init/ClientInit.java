@@ -34,12 +34,12 @@ import net.minecraft.world.phys.BlockHitResult;
 import net.minecraft.world.phys.HitResult.Type;
 import net.minecraft.world.phys.Vec3;
 import net.minecraftforge.api.distmarker.Dist;
-import net.minecraftforge.client.event.RenderGameOverlayEvent;
+import net.minecraftforge.client.event.CustomizeGuiOverlayEvent;
+import net.minecraftforge.client.event.RegisterParticleProvidersEvent;
 import net.minecraftforge.client.event.RenderHandEvent;
 import net.minecraftforge.client.event.RenderLevelStageEvent;
 import net.minecraftforge.client.event.RenderLevelStageEvent.Stage;
 import net.minecraftforge.client.event.RenderLivingEvent;
-import net.minecraftforge.event.world.WorldEvent.Load;
 import net.minecraftforge.eventbus.api.EventPriority;
 import net.minecraftforge.eventbus.api.SubscribeEvent;
 import net.minecraftforge.fml.common.Mod;
@@ -69,6 +69,16 @@ public class ClientInit
         {
             MenuScreens.register(RegistryObjects.NPC_MENU.get(), NpcScreen::new);
         }
+
+        @SubscribeEvent
+        public static void registerParticles(RegisterParticleProvidersEvent event)
+        {
+            event.register(ThutParticles.AURORA, ParticleFactories.GENERICFACTORY);
+            event.register(ThutParticles.MISC, ParticleFactories.GENERICFACTORY);
+            event.register(ThutParticles.STRING, ParticleFactories.GENERICFACTORY);
+            event.register(ThutParticles.LEAF, ParticleFactories.GENERICFACTORY);
+            event.register(ThutParticles.POWDER, ParticleFactories.GENERICFACTORY);
+        }
     }
 
     public static void line(final VertexConsumer builder, final Matrix4f positionMatrix, final float dx1,
@@ -86,22 +96,8 @@ public class ClientInit
                 a);
     }
 
-    private static boolean initParticles = false;
-
     @SubscribeEvent
-    public static void startup(final Load event)
-    {
-        if (ClientInit.initParticles) return;
-        ClientInit.initParticles = true;
-        Minecraft.getInstance().particleEngine.register(ThutParticles.AURORA, ParticleFactories.GENERICFACTORY);
-        Minecraft.getInstance().particleEngine.register(ThutParticles.MISC, ParticleFactories.GENERICFACTORY);
-        Minecraft.getInstance().particleEngine.register(ThutParticles.STRING, ParticleFactories.GENERICFACTORY);
-        Minecraft.getInstance().particleEngine.register(ThutParticles.LEAF, ParticleFactories.GENERICFACTORY);
-        Minecraft.getInstance().particleEngine.register(ThutParticles.POWDER, ParticleFactories.GENERICFACTORY);
-    }
-
-    @SubscribeEvent
-    public static void textOverlay(final RenderGameOverlayEvent.Text event)
+    public static void textOverlay(final CustomizeGuiOverlayEvent.DebugText event)
     {
         final boolean debug = Minecraft.getInstance().options.renderDebug;
         if (!debug) return;
@@ -115,7 +111,7 @@ public class ClientInit
         event.getLeft().add("");
         Level level = Minecraft.getInstance().level;
 
-        var regi = level.registryAccess().registry(Registry.CONFIGURED_STRUCTURE_FEATURE_REGISTRY);
+        var regi = level.registryAccess().registry(Registry.STRUCTURE_REGISTRY);
         Set<StructureInfo> structures = StructureManager.getNear(level.dimension(), v.getPos(), 5);
         if (regi.isPresent())
         {

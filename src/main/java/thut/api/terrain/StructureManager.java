@@ -19,11 +19,11 @@ import net.minecraft.resources.ResourceKey;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.level.ChunkPos;
 import net.minecraft.world.level.Level;
-import net.minecraft.world.level.levelgen.feature.ConfiguredStructureFeature;
 import net.minecraft.world.level.levelgen.structure.BoundingBox;
+import net.minecraft.world.level.levelgen.structure.Structure;
 import net.minecraft.world.level.levelgen.structure.StructurePiece;
 import net.minecraft.world.level.levelgen.structure.StructureStart;
-import net.minecraftforge.event.world.ChunkEvent;
+import net.minecraftforge.event.level.ChunkEvent;
 import net.minecraftforge.eventbus.api.SubscribeEvent;
 import thut.core.common.ThutCore;
 
@@ -32,20 +32,20 @@ public class StructureManager
     public static class StructureInfo
     {
         private String name = null;
-        public ConfiguredStructureFeature<?, ?> feature;
+        public Structure feature;
         public StructureStart start;
 
         private int hash = -1;
         private String key;
 
-        public StructureInfo(String name, final Entry<ConfiguredStructureFeature<?, ?>, StructureStart> entry)
+        public StructureInfo(String name, final Entry<Structure, StructureStart> entry)
         {
             this.feature = entry.getKey();
             this.name = name;
             this.start = entry.getValue();
         }
 
-        public StructureInfo(String name, ConfiguredStructureFeature<?, ?> feature, StructureStart start)
+        public StructureInfo(String name, Structure feature, StructureStart start)
         {
             this.feature = feature;
             this.name = name;
@@ -129,7 +129,7 @@ public class StructureManager
         public boolean matches(@Nullable RegistryAccess reg, String key)
         {
             if (reg == null) return key.equals(getName());
-            var regi = reg.registryOrThrow(Registry.CONFIGURED_STRUCTURE_FEATURE_REGISTRY);
+            var regi = reg.registryOrThrow(Registry.STRUCTURE_REGISTRY);
             var tags = regi.getHolderOrThrow(regi.getResourceKey(feature).get()).tags().toList();
             for (var tag : tags) if (tag.location().toString().equals(key)) return true;
             return key.equals(getName());
@@ -197,10 +197,10 @@ public class StructureManager
     public static void onChunkLoad(final ChunkEvent.Load evt)
     {
         // The world is null when it is loaded off thread during worldgen!
-        if (!(evt.getWorld() instanceof Level w) || evt.getWorld().isClientSide()) return;
+        if (!(evt.getLevel() instanceof Level w) || evt.getLevel().isClientSide()) return;
         final ResourceKey<Level> dim = w.dimension();
-        var reg = w.registryAccess().registryOrThrow(Registry.CONFIGURED_STRUCTURE_FEATURE_REGISTRY);
-        for (final Entry<ConfiguredStructureFeature<?, ?>, StructureStart> entry : evt.getChunk().getAllStarts()
+        var reg = w.registryAccess().registryOrThrow(Registry.STRUCTURE_REGISTRY);
+        for (final Entry<Structure, StructureStart> entry : evt.getChunk().getAllStarts()
                 .entrySet())
         {
             String name = reg.getKey(entry.getKey()).toString();
@@ -227,8 +227,8 @@ public class StructureManager
     @SubscribeEvent
     public static void onChunkUnload(final ChunkEvent.Unload evt)
     {
-        if (!(evt.getWorld() instanceof Level) || evt.getWorld().isClientSide()) return;
-        final Level w = (Level) evt.getWorld();
+        if (!(evt.getLevel() instanceof Level) || evt.getLevel().isClientSide()) return;
+        final Level w = (Level) evt.getLevel();
         final ResourceKey<Level> dim = w.dimension();
         final GlobalChunkPos pos = new GlobalChunkPos(dim, evt.getChunk().getPos());
         StructureManager.map_by_pos.remove(pos);
