@@ -97,7 +97,7 @@ public class EntityCraft extends BlockEntityBase implements IMultiplePassengerEn
         if (this.isServerWorld() && !this.consumePower())
         {
             this.setPos(this.position());
-            Vec3 v = this.getDeltaMovement();
+            Vec3 v = this.getV();
             double v2 = v.lengthSqr();
             if (v2 > 0)
             {
@@ -116,7 +116,9 @@ public class EntityCraft extends BlockEntityBase implements IMultiplePassengerEn
         float destZ = this.toMoveZ ? this.controller.forwardInputDown ? 30 : -30 : 0;
 
         // debug movement
-        final boolean dbug_move = false;
+        final boolean dbug_move = true;
+
+//        this.setPos(this.getX(), 0.5 + (int) this.getY(), this.getZ());
 
         if (dbug_move)
         {
@@ -126,7 +128,7 @@ public class EntityCraft extends BlockEntityBase implements IMultiplePassengerEn
 
         if (!(this.toMoveY || this.toMoveX || this.toMoveZ))
         {
-            Vec3 v = this.getDeltaMovement();
+            Vec3 v = this.getV();
             double v2 = v.lengthSqr();
             if (v2 > 0)
             {
@@ -211,12 +213,12 @@ public class EntityCraft extends BlockEntityBase implements IMultiplePassengerEn
         // // // debug movement
         if (dbug_move)
         {
-            this.speedUp = 0.1f;
-            this.speedDown = -0.1f;
-            this.acceleration = 0.25f;
             this.toMoveY = true;
-            if (this.getY() < 20) this.energy = 10;
-            if (this.getY() > 30) this.energy = -10;
+            this.speedUp = 0.5f;
+            this.speedDown = -0.5f;
+            this.acceleration = 0.25f;
+            if (this.getY() < -40) this.energy = 10;
+            if (this.getY() > 80) this.energy = -10;
             destY = this.energy > 0 ? 10 : -10;
         }
 
@@ -224,7 +226,7 @@ public class EntityCraft extends BlockEntityBase implements IMultiplePassengerEn
         if (Mth.equal(destY, 0)) destY = 0;
         if (Mth.equal(destZ, 0)) destZ = 0;
 
-        final Vec3 v = this.getDeltaMovement();
+        final Vec3 v = this.getV();
 
         double vx = v.x;
         double vy = v.y;
@@ -250,7 +252,7 @@ public class EntityCraft extends BlockEntityBase implements IMultiplePassengerEn
             vz = dz;
         }
         else vz *= 0.5;
-        this.setDeltaMovement(vx, vy, vz);
+        this.setV(new Vec3(vx, vy, vz));
     }
 
     public void addSeat(final Vec3f seat)
@@ -282,7 +284,8 @@ public class EntityCraft extends BlockEntityBase implements IMultiplePassengerEn
     @Override
     protected boolean checkAccelerationConditions()
     {
-        return this.consumePower();
+        this.consumePower();
+        return true;
     }
 
     private boolean consumePower()

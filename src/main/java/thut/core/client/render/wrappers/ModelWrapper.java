@@ -5,7 +5,6 @@ import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
-import java.util.Map.Entry;
 import java.util.Set;
 
 import com.google.common.collect.Sets;
@@ -176,13 +175,10 @@ public class ModelWrapper<T extends Entity> extends EntityModel<T> implements IM
         }
         info.currentTick = entityIn.tickCount;
         final IAnimationChanger animChanger = this.renderer.getAnimationChanger();
-        for (final Entry<String, IExtendedModelPart> entry : this.imodel.getParts().entrySet())
-        {
-            String partName = entry.getKey();
-            IExtendedModelPart part = entry.getValue();
+        this.imodel.getParts().forEach((partName, part) -> {
             if (animChanger != null) animChanger.isPartHidden(partName, entityIn, false);
             if (part instanceof IRetexturableModel tex) tex.setTexturer(texer);
-        }
+        });
         if (info != null) info.lastTick = entityIn.tickCount;
     }
 
@@ -190,17 +186,15 @@ public class ModelWrapper<T extends Entity> extends EntityModel<T> implements IM
     public void renderToBuffer(final PoseStack mat, final VertexConsumer buffer, final int packedLightIn,
             final int packedOverlayIn, final float red, final float green, final float blue, final float alpha)
     {
+        if (this.entityIn == null) return;
         if (this.imodel == null) this.imodel = ModelFactory.create(this.model);
         if (!this.isLoaded()) return;
         mat.pushPose();
         this.transformGlobal(mat, buffer, this.renderer.getAnimation(this.entityIn), this.entityIn,
                 Minecraft.getInstance().getFrameTime());
         final Set<String> excluded = Sets.newHashSet();
-        for (final Entry<String, IExtendedModelPart> entry : this.imodel.getParts().entrySet())
-        {
-            String partName = entry.getKey();
-            IExtendedModelPart part = entry.getValue();
-            if (part == null) continue;
+
+        this.imodel.getParts().forEach((partName, part) -> {
             if (part.isHidden())
             {
                 excluded.add(partName);
@@ -210,7 +204,7 @@ public class ModelWrapper<T extends Entity> extends EntityModel<T> implements IM
             {
                 this.initColours(part, this.entityIn, packedLightIn, packedOverlayIn);
             }
-        }
+        });
         if (this.imodel instanceof IModelCustom cmodel)
         {
             cmodel.renderAllExcept(mat, buffer, excluded);
@@ -271,6 +265,7 @@ public class ModelWrapper<T extends Entity> extends EntityModel<T> implements IM
     {
         if (this.imodel == null) this.imodel = ModelFactory.create(this.model);
         if (!this.isLoaded()) return;
+        this.setEntity(entityIn);
         final IAnimationHolder holder = AnimationHelper.getHolder(entityIn);
         holder.preRun();
         this.renderer.setAnimationHolder(holder);

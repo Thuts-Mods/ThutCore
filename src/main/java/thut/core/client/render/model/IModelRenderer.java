@@ -1,8 +1,7 @@
 package thut.core.client.render.model;
 
-import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
@@ -24,7 +23,7 @@ public interface IModelRenderer<T extends Entity>
     public static class Vector5
     {
         public Vector4 rotations;
-        public int     time;
+        public int time;
 
         public Vector5()
         {
@@ -64,7 +63,7 @@ public interface IModelRenderer<T extends Entity>
 
     IAnimationChanger getAnimationChanger();
 
-    HashMap<String, List<Animation>> getAnimations();
+    Map<String, List<Animation>> getAnimations();
 
     default Vector3 getRotationOffset()
     {
@@ -92,8 +91,12 @@ public interface IModelRenderer<T extends Entity>
     {
         final IAnimationHolder holder = this.getAnimationHolder();
         final String phase = this.getAnimation(entity);
-        final List<Animation> anim = this.getAnimations(entity, phase);
-        if (holder != null && anim != null && !anim.isEmpty()) holder.setPendingAnimations(anim, phase);
+        if (holder != null)
+        {
+            final List<Animation> anim = this.getAnimations(entity, phase);
+            if (getAnimations() != null) holder.initAnimations(getAnimations(), IModelRenderer.DEFAULTPHASE);
+            if (anim != null && !anim.isEmpty()) holder.setPendingAnimations(anim, phase);
+        }
     }
 
     default List<Animation> getAnimations(final Entity entity, final String phase)
@@ -125,5 +128,5 @@ public interface IModelRenderer<T extends Entity>
 
     void setTexturer(IPartTexturer texturer);
 
-    void updateModel(HashMap<String, ArrayList<Vector5>> phaseList, ModelHolder model);
+    void updateModel(Map<String, List<Vector5>> phaseList, ModelHolder model);
 }
