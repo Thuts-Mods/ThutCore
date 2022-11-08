@@ -133,7 +133,7 @@ public abstract class BlockEntityBase extends Entity implements IEntityAdditiona
     BlockEntityInteractHandler interacter;
 
     BlockPos originalPos = null;
-    Vector3 lastSyncPos = new Vector3();
+    protected Vector3 F = new Vector3();
 
     public BlockEntityBase(final EntityType<? extends BlockEntityBase> type, final Level par1World)
     {
@@ -143,7 +143,10 @@ public abstract class BlockEntityBase extends Entity implements IEntityAdditiona
         this.noPhysics = true;
     }
 
-    abstract protected void accelerate();
+    protected Vector3 getForceDirection()
+    {
+        return F;
+    }
 
     @Override
     public BlockPos getOriginalPos()
@@ -278,11 +281,99 @@ public abstract class BlockEntityBase extends Entity implements IEntityAdditiona
 
     public final void doMotion()
     {
-        final Vec3 v = this.getV();
-        if (v.lengthSqr() > 0)
+        if (this.isServerWorld())
         {
-            this.move(MoverType.SELF, v);
+            Vec3 v = this.getV().scale(0.8);
+            Vector3 a = this.getForceDirection();
+            // Just cancel velocity in this case.
+            if (a.magSq() < 0.05)
+            {
+                this.move(MoverType.SELF, a.toVec3d());
+                this.setV(v = Vec3.ZERO);
+                this.getEntityData().set(position, Optional.of(this.position()));
+            }
+            else
+            {
+                double vh = this.getSpeedHoriz();
+                double v_x = getSpeed(this.getX(), this.getX() + a.x, v.x(), vh, vh);
+                double v_y = getSpeed(this.getY(), this.getY() + a.y, v.y(), this.getSpeedUp(), this.getSpeedDown());
+                double v_z = getSpeed(this.getZ(), this.getZ() + a.z, v.z(), vh, vh);
+                this.setV(v = new Vec3(v_x, v_y, v_z));
+            }
+            if (v.lengthSqr() > 0)
+            {
+                this.move(MoverType.SELF, v);
+            }
+            else
+            {
+                this.getEntityData().set(position, Optional.of(this.position()));
+            }
         }
+        else
+        {
+            Optional<Vec3> rOpt = this.getEntityData().get(position);
+            if (!rOpt.isPresent()) return;
+            Vec3 r_1 = rOpt.get();
+            Vec3 r_0 = this.position();
+            Vec3 v = r_1.subtract(r_0);
+            this.getEntityData().set(velocity, Optional.of(v));
+            if (v.lengthSqr() > 0)
+            {
+                this.move(MoverType.SELF, v);
+            }
+        }
+    }
+
+    protected void setV(final Vec3 vec)
+    {
+        if (this.isServerWorld())
+        {
+            this.getEntityData().set(velocity, Optional.of(vec));
+            Vec3 r = this.position();
+            Vec3 v = vec;
+            Vec3 a = F.normalize().scalarMult(this.getAccel()).toVec3d();
+            this.getEntityData().set(position, Optional.of(r.add(v).add(a)));
+        }
+    }
+
+    protected double getSpeed(final double pos, final double destPos, final double speed, double speedPos,
+            double speedNeg)
+    {
+        speedPos = Math.abs(speedPos);
+        speedNeg = Math.abs(speedNeg);
+        double dr_dt = speed;
+        final double dr = destPos - pos;
+        final float dr_dt2 = this.getAccel();
+        final double t_toStop = Math.abs(dr_dt / dr_dt2);
+        final double stop_distance = dr_dt * t_toStop;
+
+        if (dr > 0)
+        {
+            if (dr_dt <= 0)
+            {
+                dr_dt += dr_dt2;
+                return Math.min(dr_dt, speedPos);
+            }
+            final boolean tooFast = stop_distance > dr;
+            final boolean tooSlow = dr_dt < speedPos;
+            if (tooFast) dr_dt -= dr_dt2;
+            else if (tooSlow) dr_dt += dr_dt2;
+            return Math.min(dr_dt, speedPos);
+        }
+        if (dr < 0)
+        {
+            if (dr_dt >= 0)
+            {
+                dr_dt -= dr_dt2;
+                return Math.max(dr_dt, -speedNeg);
+            }
+            final boolean tooFast = stop_distance > -dr;
+            final boolean tooSlow = dr_dt > -speedNeg;
+            if (tooFast) dr_dt += dr_dt2;
+            else if (tooSlow) dr_dt -= dr_dt2;
+            return Math.max(dr_dt, -speedNeg);
+        }
+        return 0;
     }
 
     @Override
@@ -334,45 +425,6 @@ public abstract class BlockEntityBase extends Entity implements IEntityAdditiona
     public BlockPos getMin()
     {
         return this.boundMin;
-    }
-
-    protected double getSpeed(final double pos, final double destPos, final double speed, double speedPos,
-            double speedNeg)
-    {
-        speedPos = Math.abs(speedPos);
-        speedNeg = Math.abs(speedNeg);
-        double dr_dt = speed;
-        final double dr = destPos - pos;
-        final float dr_dt2 = this.getAccel();
-        final double t_toStop = speed / dr_dt2;
-        final double stop_distance = dr_dt * t_toStop;
-        if (dr > 0)
-        {
-            if (dr_dt <= 0)
-            {
-                dr_dt += dr_dt2;
-                return Math.min(dr_dt, speedPos);
-            }
-            final boolean tooFast = stop_distance > dr;
-            final boolean tooSlow = dr_dt < speedPos;
-            if (tooFast) dr_dt -= dr_dt2;
-            else if (tooSlow) dr_dt += dr_dt2;
-            return Math.min(dr_dt, speedPos);
-        }
-        if (dr < 0)
-        {
-            if (dr_dt >= 0)
-            {
-                dr_dt -= dr_dt2;
-                return Math.max(dr_dt, -speedNeg);
-            }
-            final boolean tooFast = stop_distance > -dr;
-            final boolean tooSlow = dr_dt > -speedNeg;
-            if (tooFast) dr_dt += dr_dt2;
-            else if (tooSlow) dr_dt -= dr_dt2;
-            return Math.max(dr_dt, -speedNeg);
-        }
-        return 0;
     }
 
     @Override
@@ -521,14 +573,6 @@ public abstract class BlockEntityBase extends Entity implements IEntityAdditiona
         this.boundMin = pos;
     }
 
-    protected void setV(final Vec3 vec)
-    {
-        if (this.isServerWorld())
-        {
-            this.getEntityData().set(velocity, Optional.of(vec));
-        }
-    }
-
     @Override
     public void setPos(final double x, final double y, final double z)
     {
@@ -546,20 +590,14 @@ public abstract class BlockEntityBase extends Entity implements IEntityAdditiona
     {
         super.tick();
         if (this.getBlocks() == null) return;
-
         if (!this.isAddedToWorld()) this.onAddedToWorld();
-
         if (this.collider == null) this.collider = new BlockEntityUpdater(this);
         this.setBoundingBox(this.collider.getBoundingBox());
-
         this.yRot = 0;
         this.xRot = 0;
         this.preColliderTick();
         this.collider.onUpdate();
-
-        this.accelerate();
         this.doMotion();
-
         this.checkCollision();
     }
 
