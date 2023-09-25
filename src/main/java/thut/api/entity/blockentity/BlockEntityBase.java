@@ -6,17 +6,20 @@ import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicInteger;
 
+import org.joml.Vector3f;
+
 import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
-import com.mojang.math.Vector3f;
 
 import net.minecraft.core.BlockPos;
+import net.minecraft.core.registries.Registries;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.NbtUtils;
 import net.minecraft.network.FriendlyByteBuf;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.protocol.Packet;
+import net.minecraft.network.protocol.game.ClientGamePacketListener;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.InteractionHand;
@@ -29,6 +32,7 @@ import net.minecraft.world.entity.MobCategory;
 import net.minecraft.world.entity.MoverType;
 import net.minecraft.world.entity.Pose;
 import net.minecraft.world.entity.player.Player;
+import net.minecraft.world.flag.FeatureFlagSet;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.entity.BlockEntity;
@@ -64,7 +68,8 @@ public abstract class BlockEntityBase extends Entity implements IEntityAdditiona
         public BlockEntityType(final EntityType.EntityFactory<T> factory)
         {
             super(factory, MobCategory.MISC, true, false, true, true, ImmutableSet.of(),
-                    new EntityDimensions(1, 1, true), 64, 1, e -> true, e -> 64, e -> 1, null);
+                    new EntityDimensions(1, 1, true), 64, 1,
+                    FeatureFlagSet.of());
         }
 
         @Override
@@ -93,8 +98,7 @@ public abstract class BlockEntityBase extends Entity implements IEntityAdditiona
         DataSync data = DataSync_Impl.getData(event);
         if (data == null)
         {
-            data = new DataSync_Impl();
-            event.addCapability(DATASCAP, (DataSync_Impl) data);
+            event.addCapability(DATASCAP, new DataSync_Impl());
         }
     }
 
@@ -251,7 +255,7 @@ public abstract class BlockEntityBase extends Entity implements IEntityAdditiona
     public void checkCollision()
     {
         BlockPos.betweenClosedStream(this.getBoundingBox()).forEach(p -> {
-            final Level world = this.getLevel();
+            final Level world = this.level();
             final BlockState block = world.getBlockState(p);
 
             ResourceLocation replaceable = new ResourceLocation("thutcore:craft_replace");
@@ -262,7 +266,6 @@ public abstract class BlockEntityBase extends Entity implements IEntityAdditiona
             if (isReplaceable && block.getBlock() != ThutCrafts.CRAFTBLOCK.get())
             {
                 final boolean flag = world.getFluidState(p).getType() == Fluids.WATER;
-                if (!air) world.destroyBlock(p, true);
                 world.setBlockAndUpdate(p,
                         ThutCrafts.CRAFTBLOCK.get().defaultBlockState().setValue(TempBlock.WATERLOGGED, flag));
             }
@@ -278,7 +281,7 @@ public abstract class BlockEntityBase extends Entity implements IEntityAdditiona
 
         var tileV = this.getV();
         var usBounds = this.getBoundingBox().inflate(Math.abs(tileV.x()), Math.abs(tileV.y()), Math.abs(tileV.z()));
-        usBounds = usBounds.inflate(0, this.getSpeedUp(), 0);
+        usBounds = usBounds.inflate(0, Math.max(10, this.getSpeedUp()), 0);
 
         for (var entry : this.recentCollides.entrySet())
         {
@@ -293,7 +296,7 @@ public abstract class BlockEntityBase extends Entity implements IEntityAdditiona
             valid = valid && entry.getValue().lastSeen().get() >= tickCount;
             if (!valid) stale.add(entity);
 
-            if (valid) entry.getValue().lastSeen.set(this.tickCount + 10);
+            if (valid) entry.getValue().lastSeen.set(this.tickCount + 20);
 
             if (valid && tileV.y() != 0)
             {
@@ -342,7 +345,7 @@ public abstract class BlockEntityBase extends Entity implements IEntityAdditiona
     abstract protected BlockEntityInteractHandler createInteractHandler();
 
     @Override
-    public Packet<?> getAddEntityPacket()
+    public Packet<ClientGamePacketListener> getAddEntityPacket()
     {
         return NetworkHooks.getEntitySpawningPacket(this);
     }
@@ -404,7 +407,7 @@ public abstract class BlockEntityBase extends Entity implements IEntityAdditiona
             a = vec.subtract(this.v);
             v = vec;
             a = F.normalize().scalarMult(this.getAccel()).toVec3d();
-            this.dataSync.set(POS, Optional.of(r.add(v).add(a)));
+            this.dataSync.set(POS, Optional.of(r.add(v)));// .add(a)
             this.setDeltaMovement(v);
         }
     }
@@ -539,10 +542,10 @@ public abstract class BlockEntityBase extends Entity implements IEntityAdditiona
         if (nbt.contains("bounds"))
         {
             final CompoundTag bounds = nbt.getCompound("bounds");
-            this.boundMin = new BlockPos(bounds.getDouble("minx"), bounds.getDouble("miny"), bounds.getDouble("minz"));
-            this.boundMax = new BlockPos(bounds.getDouble("maxx"), bounds.getDouble("maxy"), bounds.getDouble("maxz"));
-            if (bounds.contains("orix")) this.originalPos = new BlockPos(bounds.getDouble("orix"),
-                    bounds.getDouble("oriy"), bounds.getDouble("oriz"));
+            this.boundMin = new BlockPos(bounds.getInt("minx"), bounds.getInt("miny"), bounds.getInt("minz"));
+            this.boundMax = new BlockPos(bounds.getInt("maxx"), bounds.getInt("maxy"), bounds.getInt("maxz"));
+            if (bounds.contains("orix")) this.originalPos = new BlockPos(bounds.getInt("orix"),
+                    bounds.getInt("oriy"), bounds.getInt("oriz"));
         }
         this.readBlocks(nbt);
         this.getUpdater().resetShape();
@@ -564,7 +567,7 @@ public abstract class BlockEntityBase extends Entity implements IEntityAdditiona
             {
                 final String name = "B" + i + "," + k + "," + j;
                 if (!blockTag.contains(name)) continue;
-                final BlockState state = NbtUtils.readBlockState(blockTag.getCompound(name));
+                final BlockState state = NbtUtils.readBlockState(this.level().holderLookup(Registries.BLOCK), blockTag.getCompound(name));
                 this.blocks[i][k][j] = state;
                 if (blockTag.contains("T" + i + "," + k + "," + j)) try
                 {
@@ -625,7 +628,7 @@ public abstract class BlockEntityBase extends Entity implements IEntityAdditiona
     @Override
     public void remove(final RemovalReason reason)
     {
-        if (!this.getLevel().isClientSide && this.isAlive() && this.shouldRevert)
+        if (!this.level().isClientSide && this.isAlive() && this.shouldRevert)
             IBlockEntity.BlockEntityFormer.RevertEntity(this);
         super.remove(reason);
     }

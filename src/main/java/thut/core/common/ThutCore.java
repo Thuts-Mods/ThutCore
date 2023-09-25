@@ -13,14 +13,13 @@ import org.apache.logging.log4j.Logger;
 import org.apache.logging.log4j.core.appender.FileAppender;
 
 import it.unimi.dsi.fastutil.objects.Object2ObjectOpenHashMap;
-import net.minecraft.core.Registry;
 import net.minecraft.core.particles.ParticleType;
+import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.InteractionResult;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.inventory.MenuType;
-import net.minecraft.world.item.CreativeModeTab;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.crafting.RecipeType;
 import net.minecraft.world.level.Level;
@@ -55,6 +54,7 @@ import thut.api.entity.ShearableCaps;
 import thut.api.entity.blockentity.BlockEntityBase;
 import thut.api.entity.blockentity.BlockEntityInventory;
 import thut.api.entity.blockentity.IBlockEntity;
+import thut.api.entity.event.BreakTestEvent;
 import thut.api.level.structures.StructureManager;
 import thut.api.util.PermNodes;
 import thut.core.common.config.Config;
@@ -70,7 +70,9 @@ import thut.core.common.network.TileUpdate;
 import thut.core.common.terrain.CapabilityTerrainAffected;
 import thut.core.common.world.mobs.data.PacketDataSync;
 import thut.core.init.RegistryObjects;
+import thut.core.init.ThutCreativeTabs;
 import thut.crafts.ThutCrafts;
+import thut.lib.RegHelper;
 
 @Mod(ThutCore.MODID)
 public class ThutCore
@@ -174,9 +176,9 @@ public class ThutCore
     public static class RegistryEvents
     {
         public static final DeferredRegister<RecipeType<?>> RECIPETYPE = DeferredRegister
-                .create(Registry.RECIPE_TYPE_REGISTRY, ThutCore.MODID);
+                .create(RegHelper.RECIPE_TYPE_REGISTRY, ThutCore.MODID);
         public static final DeferredRegister<LootItemFunctionType> LOOTTYPE = DeferredRegister
-                .create(Registry.LOOT_FUNCTION_REGISTRY, ThutCore.MODID);
+                .create(RegHelper.LOOT_FUNCTION_REGISTRY, ThutCore.MODID);
         public static final DeferredRegister<ParticleType<?>> PARTICLES = DeferredRegister
                 .create(ForgeRegistries.PARTICLE_TYPES, ThutCore.MODID);
         public static final DeferredRegister<MenuType<?>> MENUS = DeferredRegister.create(ForgeRegistries.MENU_TYPES,
@@ -206,15 +208,6 @@ public class ThutCore
     public static final ConfigHandler conf = new ConfigHandler();
 
     public static ItemStack THUTICON = ItemStack.EMPTY;
-
-    public static final CreativeModeTab THUTITEMS = new CreativeModeTab("thut")
-    {
-        @Override
-        public ItemStack makeIcon()
-        {
-            return ThutCore.THUTICON;
-        }
-    };
 
     private static Map<String, String> trimmed = new Object2ObjectOpenHashMap<String, String>();
 
@@ -264,6 +257,7 @@ public class ThutCore
         RegistryEvents.RECIPETYPE.register(modEventBus);
         RegistryEvents.MENUS.register(modEventBus);
         RegistryEvents.PARTICLES.register(modEventBus);
+        ThutCreativeTabs.TABS.register(modEventBus);
 
         // Register ourselves for server and other game events we are interested
         // in
@@ -273,6 +267,7 @@ public class ThutCore
         Tracker.init();
         LootLayerFunction.init();
         RegistryObjects.init();
+        BreakTestEvent.init();
 
         // Register Config stuff
         Config.setupConfigs(ThutCore.conf, ThutCore.MODID, ThutCore.MODID);
@@ -297,7 +292,10 @@ public class ThutCore
     {
         ThutCore.LOGGER.info("Setup");
 
-        if (ThutCore.THUTICON.isEmpty()) ThutCore.THUTICON = new ItemStack(ThutCrafts.CRAFTMAKER.get());
+        if (ThutCore.THUTICON.isEmpty())
+        {
+            ThutCore.THUTICON = new ItemStack(ThutCrafts.CRAFTMAKER.get());
+        }
 
         // Register the actual packets
         ThutCore.packets.registerMessage(EntityUpdate.class, EntityUpdate::new);
@@ -342,6 +340,7 @@ public class ThutCore
                 Object o = args[i];
                 // TODO regex for {} instead to support number formatting like
                 // {:.2f}
+                if (o instanceof Component c) o = c.getString();
                 key = key.replaceFirst("\\{\\}", o == null ? "null" : o.toString());
             }
             logger.accept(key);

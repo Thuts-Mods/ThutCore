@@ -1,14 +1,14 @@
 package thut.core.client.render.model.parts;
 
+import org.joml.Matrix3f;
+import org.joml.Matrix4f;
+import org.joml.Vector3f;
+import org.joml.Vector4f;
 import org.lwjgl.opengl.GL11;
 
 import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.blaze3d.vertex.VertexConsumer;
 import com.mojang.blaze3d.vertex.VertexFormat.Mode;
-import com.mojang.math.Matrix3f;
-import com.mojang.math.Matrix4f;
-import com.mojang.math.Vector3f;
-import com.mojang.math.Vector4f;
 
 import thut.api.maths.vecmath.Vec3f;
 import thut.core.client.render.model.Vertex;
@@ -179,12 +179,12 @@ public abstract class Mesh
             float s = len * scale;
 
             dp.set(s, s, s, 0);
-            dp.transform(pos);
+            dp.mul(pos);
             dp.mul(a);
             double dr2_us = dp.dot(dp);
 
             dp.set(0, 0, 0, 1);
-            dp.transform(pos);
+            dp.mul(pos);
             double dr2_2 = dp.dot(dp);
 
             boolean size_cull = modelCullThreshold * dr2_2 >= dr2_us;
@@ -211,7 +211,7 @@ public abstract class Mesh
 
         final boolean flat = this.material.flat;
         Vertex[] normals = flat ? this.normalList : this.normals;
-        final com.mojang.math.Vector3f dn = this.dummy3;
+        final Vector3f dn = this.dummy3;
         final Matrix3f norms = matrixstack$entry.normal();
 
         Vertex vertex;
@@ -234,7 +234,7 @@ public abstract class Mesh
             nz = normal.z;
 
             dn.set(nx, ny, nz);
-            dn.transform(norms);
+            dn.mul(norms);
 
             // Next we can pull out the coordinates if not culled.
             textureCoordinate = this.textureCoordinates[i];
@@ -245,7 +245,7 @@ public abstract class Mesh
             z = vertex.z;
 
             dp.set(x, y, z, 1);
-            dp.transform(pos);
+            dp.mul(pos);
 
             u = textureCoordinate.u + (float) this.uvShift[0];
             v = textureCoordinate.v + (float) this.uvShift[1];

@@ -1,20 +1,18 @@
 package thut.api.boom;
 
+import it.unimi.dsi.fastutil.objects.Object2FloatMap.Entry;
+import it.unimi.dsi.fastutil.objects.Object2FloatOpenHashMap;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
-
-import it.unimi.dsi.fastutil.objects.Object2FloatMap.Entry;
-import it.unimi.dsi.fastutil.objects.Object2FloatOpenHashMap;
 import net.minecraft.Util;
 import net.minecraft.core.BlockPos;
-import net.minecraft.core.Registry;
 import net.minecraft.core.particles.ParticleTypes;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.sounds.SoundEvents;
 import net.minecraft.sounds.SoundSource;
-import net.minecraft.world.damagesource.DamageSource;
+import net.minecraft.tags.BlockTags;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EntityDimensions;
 import net.minecraft.world.entity.player.Player;
@@ -26,20 +24,20 @@ import net.minecraft.world.level.chunk.LevelChunk;
 import net.minecraft.world.level.levelgen.structure.templatesystem.StructurePlaceSettings;
 import net.minecraft.world.level.levelgen.structure.templatesystem.StructureProcessorList;
 import net.minecraft.world.level.levelgen.structure.templatesystem.StructureTemplate.StructureBlockInfo;
-import net.minecraft.world.level.material.Material;
 import net.minecraftforge.common.MinecraftForge;
 import net.minecraftforge.event.TickEvent.LevelTickEvent;
 import net.minecraftforge.event.TickEvent.Phase;
-import net.minecraftforge.event.level.BlockEvent.BreakEvent;
 import net.minecraftforge.event.level.ExplosionEvent;
 import net.minecraftforge.event.level.LevelEvent.Unload;
 import net.minecraftforge.eventbus.api.EventPriority;
 import net.minecraftforge.eventbus.api.SubscribeEvent;
 import thut.api.boom.ShadowMaskChecker.ResistProvider;
+import thut.api.entity.event.BreakTestEvent;
 import thut.api.item.ItemList;
 import thut.api.level.terrain.TerrainManager;
 import thut.api.maths.Vector3;
 import thut.core.common.ThutCore;
+import thut.lib.RegHelper;
 
 public class ExplosionCustom extends Explosion
 {
@@ -96,8 +94,8 @@ public class ExplosionCustom extends Explosion
             BlockState to = Blocks.AIR.defaultBlockState();
             if (power < 36)
             {
-                if (state.getMaterial() == Material.LEAVES) to = Blocks.FIRE.defaultBlockState();
-                if (state.getMaterial() == Material.REPLACEABLE_PLANT) to = Blocks.FIRE.defaultBlockState();
+                if (state.is(BlockTags.LEAVES)) to = Blocks.FIRE.defaultBlockState();
+                if (state.canBeReplaced()) to = Blocks.FIRE.defaultBlockState();
             }
             level.setBlock(pos, to, 3);
             return to;
@@ -147,7 +145,7 @@ public class ExplosionCustom extends Explosion
         public DefaultBreaker(ServerLevel level)
         {
             this.level = level;
-            list = level.registryAccess().registryOrThrow(Registry.PROCESSOR_LIST_REGISTRY).get(DAMAGE_LIST);
+            list = level.registryAccess().registryOrThrow(RegHelper.PROCESSOR_LIST_REGISTRY).get(DAMAGE_LIST);
             settings = new StructurePlaceSettings();
         }
 
@@ -163,9 +161,9 @@ public class ExplosionCustom extends Explosion
             {
                 info = list.process(level, pos, pos, info, processed, settings, null);
             }
-            if (state != info.state)
+            if (info != null && state != info.state())
             {
-                state = info.state;
+                state = info.state();
                 level.setBlock(pos, state, 3);
             }
             return state;
@@ -186,7 +184,7 @@ public class ExplosionCustom extends Explosion
         final EntityDimensions size = e.getDimensions(e.getPose());
         final float area = size.width * size.height;
         final float damage = area * power;
-        if (!e.isInvulnerable()) e.hurt(DamageSource.explosion(boom), damage);
+        if (!e.isInvulnerable()) e.hurt(e.damageSources().explosion(boom), damage);
     };
 
     float minBlastDamage;
@@ -269,19 +267,8 @@ public class ExplosionCustom extends Explosion
     {
         final boolean ret = !ItemList.is(EXPLOSION_BLOCKING, state);
         if (!ret) return false;
-
-        if (this.owner != null) try
-        {
-            final BreakEvent evt = new BreakEvent(this.level, location.getPos(), state, this.owner);
-            MinecraftForge.EVENT_BUS.post(evt);
-            if (evt.isCanceled()) return false;
-        }
-        catch (final Exception e)
-        {
-            ThutCore.LOGGER.error("Error checking if we can break a block!");
-            ThutCore.LOGGER.error(e);
+        if (this.owner != null && !BreakTestEvent.testBreak(this.level, location.getPos(), state, this.owner))
             return false;
-        }
         return true;
     }
 

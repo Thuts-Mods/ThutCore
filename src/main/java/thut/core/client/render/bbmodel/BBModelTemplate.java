@@ -1,19 +1,24 @@
 package thut.core.client.render.bbmodel;
 
+import com.mojang.math.Axis;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
-import com.mojang.math.Quaternion;
-import com.mojang.math.Vector3f;
+import com.google.common.collect.Lists;
+import com.google.common.collect.Maps;
+import com.google.gson.JsonObject;
 
 import net.minecraft.core.Direction;
+import org.joml.Quaternionf;
+import org.joml.Vector3f;
 import thut.api.maths.vecmath.Vec3f;
 import thut.api.util.JsonUtil;
 import thut.core.client.render.model.Vertex;
 import thut.core.client.render.texturing.TextureCoordinate;
+import thut.core.common.ThutCore;
 
 public class BBModelTemplate
 {
@@ -31,13 +36,20 @@ public class BBModelTemplate
     public List<Element> elements = new ArrayList<>();
     public List<JsonGroup> outliner = new ArrayList<>();
     public List<Texture> textures = new ArrayList<>();
+    public List<BBAnimation> animations = new ArrayList<>();
     public Resolution resolution = new Resolution();
 
     public Map<String, Object> _by_uuid = new HashMap<>();
+    public Map<String, List<Element>> _unique_mesh_owners = new HashMap<>();
 
     public void init()
     {
-        elements.forEach(e -> _by_uuid.put(e.uuid, e));
+        elements.forEach(e -> {
+            _by_uuid.put(e.uuid, e);
+            if (e.type.equals("mesh")) e.faces.forEach((key, json) -> {
+                _unique_mesh_owners.computeIfAbsent(key, var -> new ArrayList<>()).add(e);
+            });
+        });
         textures.forEach(e -> _by_uuid.put(e.uuid, e));
         outliner.forEach(e -> e.init(this));
     }
@@ -68,7 +80,7 @@ public class BBModelTemplate
         String uuid;
     }
 
-    public static class BBModelFace
+    public static class BBModelQuad
     {
         public Vertex[] points = new Vertex[4];
         public TextureCoordinate[] tex = new TextureCoordinate[4];
@@ -93,11 +105,11 @@ public class BBModelTemplate
         }
     }
 
-    public static class BBModelBox
+    public static class BBCubeElement
     {
-        BBModelFace[] faces = new BBModelFace[6];
+        BBModelQuad[] quads = new BBModelQuad[6];
 
-        public BBModelBox(BBModelTemplate template, Element b)
+        public BBCubeElement(BBModelTemplate template, Element b)
         {
             float[] from = new float[]
             { 0, 0, 0 };
@@ -108,113 +120,141 @@ public class BBModelTemplate
             float[] mid_offset = new float[]
             { 0, 0, 0 };
 
-            float f = 1 + b.inflate;
+            float f = b.inflate;
 
             for (int i = 0; i < 3; i++)
             {
-                float size = (b.to[i] - b.from[i]) * f;
-                float mid = -(b.to[i] + b.from[i]) * f / 2;
-                origin_offset[i] = -b.origin[i] + b.from[i];
+                float size = (b.to[i] - b.from[i]);
+                size = size + 2 * f;
+                float mid = (b.to[i] + b.from[i]) / 2;
+                origin_offset[i] = -b.origin[i] + b.from[i] - f;
                 to[i] = size;
-                mid_offset[i] = -mid - size / 2;
+                mid_offset[i] = mid - size / 2;
             }
 
-            if (b.faces.down != null)
+            CubeFace up = null, down = null, east = null, west = null, north = null, south = null;
+
+            if (b.faces.containsKey("up"))
+            {
+                up = JsonUtil.gson.fromJson(b.faces.get("up"), CubeFace.class);
+            }
+            if (b.faces.containsKey("down"))
+            {
+                down = JsonUtil.gson.fromJson(b.faces.get("down"), CubeFace.class);
+            }
+            if (b.faces.containsKey("east"))
+            {
+                east = JsonUtil.gson.fromJson(b.faces.get("east"), CubeFace.class);
+            }
+            if (b.faces.containsKey("west"))
+            {
+                west = JsonUtil.gson.fromJson(b.faces.get("west"), CubeFace.class);
+            }
+            if (b.faces.containsKey("north"))
+            {
+                north = JsonUtil.gson.fromJson(b.faces.get("north"), CubeFace.class);
+            }
+            if (b.faces.containsKey("south"))
+            {
+                south = JsonUtil.gson.fromJson(b.faces.get("south"), CubeFace.class);
+            }
+
+            if (down != null && down.texture != null)
             {
                 // y low face, so y is from[1]
-                BBModelFace face = new BBModelFace();
+                BBModelQuad face = new BBModelQuad();
                 face.points[0] = new Vertex(from[0], from[1], to[2]);
                 face.points[1] = new Vertex(from[0], from[1], from[2]);
                 face.points[2] = new Vertex(to[0], from[1], from[2]);
                 face.points[3] = new Vertex(to[0], from[1], to[2]);
-                face.rotation = b.faces.down.rotation;
-                face.texture = b.faces.down.texture;
-                face.uvs = b.faces.down.uv;
-                if (face.isValid()) faces[Direction.DOWN.ordinal()] = face;
+                face.rotation = down.rotation;
+                face.texture = down.texture;
+                face.uvs = down.uv;
+                if (face.isValid()) quads[Direction.DOWN.ordinal()] = face;
             }
-            if (b.faces.up != null)
+            if (up != null && up.texture != null)
             {
                 // y high face, so y is to[1]
-                BBModelFace face = new BBModelFace();
+                BBModelQuad face = new BBModelQuad();
                 face.points[0] = new Vertex(from[0], to[1], from[2]);
                 face.points[1] = new Vertex(from[0], to[1], to[2]);
                 face.points[2] = new Vertex(to[0], to[1], to[2]);
                 face.points[3] = new Vertex(to[0], to[1], from[2]);
-                face.rotation = b.faces.up.rotation;
-                face.texture = b.faces.up.texture;
-                face.uvs = b.faces.up.uv;
-                if (face.isValid()) faces[Direction.UP.ordinal()] = face;
+                face.rotation = up.rotation;
+                face.texture = up.texture;
+                face.uvs = up.uv;
+                if (face.isValid()) quads[Direction.UP.ordinal()] = face;
             }
-            if (b.faces.west != null)
+            if (west != null && west.texture != null)
             {
                 // x low face, so x is from[0]
-                BBModelFace face = new BBModelFace();
+                BBModelQuad face = new BBModelQuad();
                 face.points[0] = new Vertex(from[0], to[1], from[2]);
                 face.points[1] = new Vertex(from[0], from[1], from[2]);
                 face.points[2] = new Vertex(from[0], from[1], to[2]);
                 face.points[3] = new Vertex(from[0], to[1], to[2]);
-                face.rotation = b.faces.west.rotation;
-                face.texture = b.faces.west.texture;
-                face.uvs = b.faces.west.uv;
-                if (face.isValid()) faces[Direction.WEST.ordinal()] = face;
+                face.rotation = west.rotation;
+                face.texture = west.texture;
+                face.uvs = west.uv;
+                if (face.isValid()) quads[Direction.WEST.ordinal()] = face;
             }
-            if (b.faces.east != null)
+            if (east != null && east.texture != null)
             {
                 // x high face, so x is to[0]
-                BBModelFace face = new BBModelFace();
+                BBModelQuad face = new BBModelQuad();
                 face.points[0] = new Vertex(to[0], to[1], to[2]);
                 face.points[1] = new Vertex(to[0], from[1], to[2]);
                 face.points[2] = new Vertex(to[0], from[1], from[2]);
                 face.points[3] = new Vertex(to[0], to[1], from[2]);
-                face.rotation = b.faces.east.rotation;
-                face.texture = b.faces.east.texture;
-                face.uvs = b.faces.east.uv;
-                if (face.isValid()) faces[Direction.EAST.ordinal()] = face;
+                face.rotation = east.rotation;
+                face.texture = east.texture;
+                face.uvs = east.uv;
+                if (face.isValid()) quads[Direction.EAST.ordinal()] = face;
             }
-            if (b.faces.north != null)
+            if (north != null && north.texture != null)
             {
                 // z low face, so z is from[2]
-                BBModelFace face = new BBModelFace();
+                BBModelQuad face = new BBModelQuad();
                 face.points[0] = new Vertex(to[0], to[1], from[2]);
                 face.points[1] = new Vertex(to[0], from[1], from[2]);
                 face.points[2] = new Vertex(from[0], from[1], from[2]);
                 face.points[3] = new Vertex(from[0], to[1], from[2]);
-                face.rotation = b.faces.north.rotation;
-                face.texture = b.faces.north.texture;
-                face.uvs = b.faces.north.uv;
-                if (face.isValid()) faces[Direction.NORTH.ordinal()] = face;
+                face.rotation = north.rotation;
+                face.texture = north.texture;
+                face.uvs = north.uv;
+                if (face.isValid()) quads[Direction.NORTH.ordinal()] = face;
             }
-            if (b.faces.south != null)
+            if (south != null && south.texture != null)
             {
                 // z high face, so z is to[2]
-                BBModelFace face = new BBModelFace();
+                BBModelQuad face = new BBModelQuad();
                 face.points[0] = new Vertex(from[0], to[1], to[2]);
                 face.points[1] = new Vertex(from[0], from[1], to[2]);
                 face.points[2] = new Vertex(to[0], from[1], to[2]);
                 face.points[3] = new Vertex(to[0], to[1], to[2]);
-                face.rotation = b.faces.south.rotation;
-                face.texture = b.faces.south.texture;
-                face.uvs = b.faces.south.uv;
-                if (face.isValid()) faces[Direction.SOUTH.ordinal()] = face;
+                face.rotation = south.rotation;
+                face.texture = south.texture;
+                face.uvs = south.uv;
+                if (face.isValid()) quads[Direction.SOUTH.ordinal()] = face;
             }
 
             float us = template.resolution.width;
             float vs = template.resolution.height;
 
-            Quaternion quat = new Quaternion(0, 0, 0, true);
+            Quaternionf quat = new Quaternionf(0, 0, 0, 1);
 
             if (b.getRotation() != null)
             {
                 float x = b.getRotation()[0];
-                float y = b.getRotation()[1];
-                float z = -b.getRotation()[2];
-                quat = new Quaternion(x, y, z, true);
+                float y = b.getRotation()[2];
+                float z = b.getRotation()[1];
+                if (y != 0) quat.mul(Axis.ZP.rotationDegrees(y));
+                if (z != 0) quat.mul(Axis.YP.rotationDegrees(z));
+                if (x != 0) quat.mul(Axis.XP.rotationDegrees(x));
             }
 
             Vector3f origin = new Vector3f(origin_offset);
             Vector3f shift = new Vector3f(mid_offset);
-
-            boolean bedrock = template.meta.model_format.equals("bedrock");
 
             int[][] tex_order =
             {
@@ -223,7 +263,7 @@ public class BBModelTemplate
                     { 2, 3 },
                     { 2, 1 } };
 
-            for (var face : faces)
+            for (var face : quads)
             {
                 if (face == null) continue;
 
@@ -238,18 +278,154 @@ public class BBModelTemplate
                     // We need to translate to rotation point, then rotate, then
                     // translate back.
                     vec.add(origin);
-                    vec.transform(quat);
+                    quat.transform(vec);
                     vec.sub(origin);
 
                     // Now translate to where it should be
                     vec.add(shift);
 
-                    if (bedrock) v.set(-vec.x() / 16, -vec.z() / 16, vec.y() / 16);
-                    else v.set(vec.x() / 16, -vec.z() / 16, vec.y() / 16);
+                    v.set(vec.x() / 16, -vec.z() / 16, vec.y() / 16);
                     int i = (index + face.rotation / 90) % 4;
                     int u0 = tex_order[i][0];
                     int v0 = tex_order[i][1];
                     face.tex[index] = new TextureCoordinate(face.uvs[u0] / us, face.uvs[v0] / vs);
+                }
+            }
+        }
+    }
+
+    public static class BBMeshElement
+    {
+        List<BBModelQuad> quads = Lists.newArrayList();
+        List<BBModelQuad> tris = Lists.newArrayList();
+
+        private boolean brokenQuad(MeshFace face, Map<String, Vertex> verts)
+        {
+            if (face.vertices.size() != 4) return false;
+            Vertex toNext = new Vertex(0, 0);
+            Vertex toPrev = new Vertex(0, 0);
+            Vertex toOpp = new Vertex(0, 0);
+            var vert = verts.get(face.vertices.get(0));
+            var next = verts.get(face.vertices.get((1)));
+            var crnr = verts.get(face.vertices.get((2)));
+            var prev = verts.get(face.vertices.get((3)));
+
+            toNext.sub(next, vert);
+            toPrev.sub(prev, vert);
+            toOpp.sub(crnr, vert);
+
+            double d1 = toNext.angle(toPrev);
+            double d2 = toNext.angle(toOpp);
+            double d3 = toPrev.angle(toOpp);
+            // If it is a square sided quad, this is a text of squareness.
+            if (Math.abs(d2 + d3 - d1) > 1e-5)
+            {
+                return true;
+            }
+            // Otherwise check if the angle is larger between sides than to
+            // opposite.
+            return d2 > d1;
+        }
+
+        public BBMeshElement(BBModelTemplate template, Element b)
+        {
+            float us = template.resolution.width;
+            float vs = template.resolution.height;
+
+            Quaternionf quat = new Quaternionf(0, 0, 0, 1);
+
+            if (b.getRotation() != null)
+            {
+                float x = b.getRotation()[0];
+                float y = b.getRotation()[2];
+                float z = b.getRotation()[1];
+                if (y != 0) quat.mul(Axis.ZP.rotationDegrees(y));
+                if (z != 0) quat.mul(Axis.YN.rotationDegrees(z));
+                if (x != 0) quat.mul(Axis.XP.rotationDegrees(x));
+            }
+
+            Vector3f origin = new Vector3f(b.origin);
+
+            Map<String, Vertex> verts = Maps.newHashMap();
+
+            for (var entry : b.vertices.entrySet())
+            {
+                var key = entry.getKey();
+                var array = entry.getValue();
+
+                Vertex v = new Vertex(0, 0, 0);
+                // This should be a point on a box with a corner at 0,0,0.
+                Vector3f vec = new Vector3f(array);
+
+                // We need to translate to rotation point, then rotate, then
+                // translate back.
+                quat.transform(vec);
+                vec.add(origin);
+
+                float x = vec.x() / 16f;
+                float y = -vec.z() / 16f;
+                float z = vec.y() / 16f;
+
+                v.set(x, y, z);
+                verts.put(key, v);
+            }
+
+            for (var entry : b.faces.entrySet())
+            {
+                var key = entry.getKey();
+                var json = entry.getValue();
+                MeshFace face = JsonUtil.gson.fromJson(json, MeshFace.class);
+                BBModelQuad quad = new BBModelQuad();
+
+                var map_order = face.vertices;
+                boolean same = !brokenQuad(face, verts);
+
+                if (!same)
+                {
+                    var other_meshs = template._unique_mesh_owners.get(key);
+                    if (other_meshs.size() > 1)
+                    {
+                        var other_b = other_meshs.get(0) == b ? other_meshs.get(1) : other_meshs.get(0);
+                        MeshFace face_2 = JsonUtil.gson.fromJson(other_b.faces.get(key), MeshFace.class);
+                        map_order = face_2.vertices;
+
+                        // Now check if the face is also broken, if so, fix it
+                        // manually
+                        var borked = brokenQuad(face_2, verts);
+                        if (borked)
+                        {
+                            map_order = face.vertices;
+                            var a = face.vertices.get(1);
+                            face.vertices.set(1, face.vertices.get(2));
+                            face.vertices.set(2, a);
+                            same = true;
+                        }
+                    }
+                    else
+                    {
+                        map_order = face.vertices;
+                        var a = face.vertices.get(2);
+                        face.vertices.set(2, face.vertices.get(3));
+                        face.vertices.set(3, a);
+                        same = true;
+                    }
+                }
+
+                for (int j = 0; j < face.vertices.size(); j++)
+                {
+                    int i = same ? j : face.vertices.size() - j - 1;
+                    String vert_key = same ? face.vertices.get(i) : map_order.get(i);
+                    Vertex v = verts.get(vert_key);
+                    float[] uv = face.uv.get(vert_key);
+                    quad.points[j] = v;
+                    quad.tex[j] = new TextureCoordinate(uv[0] / us, uv[1] / vs);
+                }
+
+                if (face.vertices.size() == 4) this.quads.add(quad);
+                else if (face.vertices.size() == 3) this.tris.add(quad);
+                else
+                {
+                    ThutCore.LOGGER.error("Unsupported vertex count: " + face.vertices.size());
                 }
             }
         }
@@ -265,8 +441,104 @@ public class BBModelTemplate
         public float[] origin;
         public float[] rotation;
         public int color;
+        public boolean box_uv = false;
+        public boolean visibility = true;
         public float inflate = 0.0f;
-        public JsonFaces faces;
+        public Map<String, JsonObject> faces;
+        public Map<String, float[]> vertices;
+        public JsonGroup _parent = null;
+
+        public void toMeshs(BBModelTemplate t, Map<String, List<List<Object>>> quads_materials,
+                Map<String, List<List<Object>>> tris_materials)
+        {
+            if (!this.visibility) return;
+            if (this.type.equals("cube"))
+            {
+                BBCubeElement box = new BBCubeElement(t, this);
+                for (var face : box.quads)
+                {
+                    if (face == null) continue;
+                    List<Object> order = Lists.newArrayList();
+                    List<Object> verts = Lists.newArrayList();
+                    List<Object> tex = Lists.newArrayList();
+                    String material = t.textures.get(face.texture).name;
+                    if (quads_materials.containsKey(material))
+                    {
+                        List<List<Object>> lists = quads_materials.get(material);
+                        order = lists.get(0);
+                        verts = lists.get(1);
+                        tex = lists.get(2);
+                    }
+                    for (int i = 0; i < 4; i++)
+                    {
+                        int index = i;
+                        Integer o = order.size();
+                        Vertex v = face.points[index];
+                        var tx = face.tex[index];
+                        order.add(o);
+                        verts.add(v);
+                        tex.add(tx);
+                    }
+                    quads_materials.put(material, Lists.newArrayList(order, verts, tex));
+                }
+            }
+            else if (this.type.equals("mesh"))
+            {
+                BBMeshElement box = new BBMeshElement(t, this);
+                for (var face : box.quads)
+                {
+                    if (face == null) continue;
+                    List<Object> order = Lists.newArrayList();
+                    List<Object> verts = Lists.newArrayList();
+                    List<Object> tex = Lists.newArrayList();
+                    String material = t.textures.get(face.texture).name;
+                    if (quads_materials.containsKey(material))
+                    {
+                        List<List<Object>> lists = quads_materials.get(material);
+                        order = lists.get(0);
+                        verts = lists.get(1);
+                        tex = lists.get(2);
+                    }
+                    for (int i = 0; i < 4; i++)
+                    {
+                        int index = i;
+                        Integer o = order.size();
+                        Vertex v = face.points[index];
+                        var tx = face.tex[index];
+                        order.add(o);
+                        verts.add(v);
+                        tex.add(tx);
+                    }
+                    quads_materials.put(material, Lists.newArrayList(order, verts, tex));
+                }
+                for (var face : box.tris)
+                {
+                    if (face == null) continue;
+                    List<Object> order = Lists.newArrayList();
+                    List<Object> verts = Lists.newArrayList();
+                    List<Object> tex = Lists.newArrayList();
+                    String material = t.textures.get(face.texture).name;
+                    if (tris_materials.containsKey(material))
+                    {
+                        List<List<Object>> lists = tris_materials.get(material);
+                        order = lists.get(0);
+                        verts = lists.get(1);
+                        tex = lists.get(2);
+                    }
+                    for (int i = 0; i < 3; i++)
+                    {
+                        int index = i;
+                        Integer o = order.size();
+                        Vertex v = face.points[index];
+                        var tx = face.tex[index];
+                        order.add(o);
+                        verts.add(v);
+                        tex.add(tx);
+                    }
+                    tris_materials.put(material, Lists.newArrayList(order, verts, tex));
+                }
+            }
+        }
 
         @Override
         public String toString()
@@ -291,23 +563,34 @@ public class BBModelTemplate
         {
             return name;
         }
+
+        public void shift(float[] origin)
+        {
+            if (this.type.equals("cube")) for (int i = 0; i < 3; i++)
+            {
+                this.origin[i] -= origin[i];
+                this.from[i] -= origin[i];
+                this.to[i] -= origin[i];
+            }
+            else if (this.type.equals("mesh"))
+            {
+                for (int i = 0; i < 3; i++) this.origin[i] -= origin[i];
+            }
+        }
     }
 
-    public static class JsonFaces
-    {
-        public JsonFace north;
-        public JsonFace east;
-        public JsonFace south;
-        public JsonFace west;
-        public JsonFace up;
-        public JsonFace down;
-    }
-
-    public static class JsonFace
+    public static class CubeFace
     {
         public float[] uv;
-        public int texture;
+        public Integer texture = 0;
         public int rotation = 0;
+    }
+
+    public static class MeshFace
+    {
+        public Map<String, float[]> uv;
+        public List<String> vertices;
+        public Integer texture = 0;
     }
 
     public static class JsonGroup implements IBBPart
@@ -339,12 +622,8 @@ public class BBModelTemplate
                 {
                     Element b = (Element) template._by_uuid.get(o);
                     if (b.name.equals("cube")) b.name = this.name;
-                    for (int i = 0; i < 3; i++)
-                    {
-                        b.origin[i] -= this.origin[i];
-                        b.from[i] -= this.origin[i];
-                        b.to[i] -= this.origin[i];
-                    }
+                    b._parent = this;
+                    b.shift(this.origin);
                     newChildren.add(b);
                     _empty = false;
                 }
@@ -397,13 +676,19 @@ public class BBModelTemplate
             public List<BBKeyFrame> keyframes = new ArrayList<>();
         }
 
-        public static class BBKeyFrame
+        public static class BBKeyFrame implements Comparable<BBKeyFrame>
         {
             public String channel;
             public String uuid;
             public String interpolation;
             public double time;
             public List<BBDataPoint> data_points = new ArrayList<>();
+
+            @Override
+            public int compareTo(BBKeyFrame o)
+            {
+                return Double.compare(time, o.time);
+            }
         }
 
         public static class BBDataPoint

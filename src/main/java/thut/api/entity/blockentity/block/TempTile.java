@@ -4,7 +4,6 @@ import java.util.Set;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import com.google.common.collect.Sets;
-import com.mojang.math.Vector3f;
 
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
@@ -23,6 +22,7 @@ import net.minecraft.world.phys.shapes.Shapes;
 import net.minecraft.world.phys.shapes.VoxelShape;
 import net.minecraftforge.common.capabilities.Capability;
 import net.minecraftforge.common.util.LazyOptional;
+import org.joml.Vector3f;
 import thut.api.block.ITickTile;
 import thut.api.entity.blockentity.BlockEntityBase;
 import thut.api.entity.blockentity.BlockEntityBase.RelativeEntityPos;
@@ -154,7 +154,7 @@ public class TempTile extends BlockEntity implements ITickTile
         if (this.blockEntity == null) return distance;
         this.blockEntity.recentCollides.computeIfAbsent(entity, (e) -> {
             var v = new RelativeEntityPos(e, new AtomicInteger(), new Vector3f());
-            v.lastSeen().set(this.blockEntity.tickCount + 10);
+            v.lastSeen().set(this.blockEntity.tickCount + 20);
             float dx = (float) (entity.getX() - this.blockEntity.getX());
             float dy = (float) (entity.getY() - this.blockEntity.getY());
             float dz = (float) (entity.getZ() - this.blockEntity.getZ());

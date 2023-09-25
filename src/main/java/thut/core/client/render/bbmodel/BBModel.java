@@ -6,8 +6,10 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 
 import com.google.common.collect.Lists;
+import com.google.common.collect.Sets;
 
 import net.minecraft.client.Minecraft;
 import net.minecraft.resources.ResourceLocation;
@@ -15,11 +17,15 @@ import thut.api.entity.animation.Animation;
 import thut.api.util.JsonUtil;
 import thut.core.client.render.bbmodel.BBModelTemplate.JsonGroup;
 import thut.core.client.render.model.BaseModel;
+import thut.core.client.render.model.IModelRenderer;
 import thut.core.common.ThutCore;
 import thut.lib.ResourceHelper;
 
 public class BBModel extends BaseModel
 {
+    private BBModelTemplate template;
+    private Set<String> builtin_anims = Sets.newHashSet();
+
     public BBModel()
     {
         super();
@@ -54,6 +60,27 @@ public class BBModel extends BaseModel
         }
     }
 
+    @Override
+    public Set<String> getBuiltInAnimations()
+    {
+        return builtin_anims;
+    }
+
+    @Override
+    public void initBuiltInAnimations(IModelRenderer<?> renderer, List<Animation> tblAnims)
+    {
+        var loaded = AnimationConversion.make_animations(this.template, this);
+        this.builtin_anims.clear();
+        for (var entry : loaded.entrySet())
+        {
+            String key = entry.getKey();
+            var list = entry.getValue();
+            this.builtin_anims.add(key);
+            tblAnims.addAll(list);
+            ThutCore.LOGGER.debug("Loaded animation: {}", key);
+        }
+    }
+
     private void makeObjects(BBModelTemplate t)
     {
         List<BBModelPart> parts = Lists.newArrayList();
@@ -79,12 +106,11 @@ public class BBModel extends BaseModel
         {
             this.parts.put(p.getName(), p);
         }
+        this.template = t;
     }
 
     @Override
     public void preProcessAnimations(Collection<Animation> collection)
-    {
-
-    }
+    {}
 
 }

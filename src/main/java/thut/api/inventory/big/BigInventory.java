@@ -50,7 +50,7 @@ public abstract class BigInventory implements Container, INBTSerializable<Compou
     {
         this.boxes = new String[this.boxCount()];
         for (int i = 0; i < this.boxCount(); i++)
-            this.boxes[i] = "Box " + String.valueOf(i + 1);
+            this.boxes[i] = "Page " + String.valueOf(i + 1);
         this.opened = new boolean[this.boxCount()];
         this.id = id;
         this.contents.defaultReturnValue(ItemStack.EMPTY);
@@ -68,7 +68,7 @@ public abstract class BigInventory implements Container, INBTSerializable<Compou
     {
         this.boxes = new String[this.boxCount()];
         for (int i = 0; i < this.boxCount(); i++)
-            this.boxes[i] = "Box " + String.valueOf(i + 1);
+            this.boxes[i] = "Page " + String.valueOf(i + 1);
         this.opened = new boolean[this.boxCount()];
         this.contents.defaultReturnValue(ItemStack.EMPTY);
         this.manager = manager;
@@ -86,11 +86,16 @@ public abstract class BigInventory implements Container, INBTSerializable<Compou
     {
         this.boxes = new String[this.boxCount()];
         for (int i = 0; i < this.boxCount(); i++)
-            this.boxes[i] = "Box " + String.valueOf(i + 1);
+            this.boxes[i] = "Page " + String.valueOf(i + 1);
         this.opened = new boolean[this.boxCount()];
         this.contents.defaultReturnValue(ItemStack.EMPTY);
         this.manager = manager;
-        if (buffer != null) this.deserializeNBT(buffer.readNbt());
+        if (buffer != null)
+        {
+            CompoundTag tag = buffer.readNbt();
+            CompoundTag boxes = tag.getCompound("boxes");
+            this.deserializeBoxInfo(boxes);
+        }
         this.isReal = false;
     }
 

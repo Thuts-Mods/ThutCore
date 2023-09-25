@@ -7,8 +7,8 @@ import java.util.Set;
 
 import com.google.common.collect.ImmutableSet;
 import com.mojang.blaze3d.vertex.PoseStack;
-import com.mojang.math.Quaternion;
 
+import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.entity.Entity;
 import thut.api.entity.IAnimated.IAnimationHolder;
 import thut.api.entity.animation.Animation;
@@ -17,6 +17,7 @@ import thut.api.maths.vecmath.Vec3f;
 import thut.core.client.render.animation.AnimationXML.Mat;
 import thut.core.client.render.model.parts.Material;
 import thut.core.common.ThutCore;
+import thut.lib.AxisAngles;
 
 public interface IModel
 {
@@ -34,10 +35,13 @@ public interface IModel
         return IModel.emptyAnims;
     }
 
+    default void initBuiltInAnimations(IModelRenderer<?> renderer, List<Animation> tblAnims)
+    {}
+
     Set<String> getHeadParts();
 
     Map<String, IExtendedModelPart> getParts();
-    
+
     List<String> getRenderOrder();
 
     default void setAnimationHolder(final IAnimationHolder holder)
@@ -54,13 +58,13 @@ public interface IModel
     default void globalFix(final PoseStack mat, final float dx, final float dy, final float dz)
     {
         // These are the parameters for models exported from blender.
-        mat.mulPose(new Quaternion(90, 0, 180, true));
+        mat.mulPose(AxisAngles.MODEL_ROTATE);
         mat.translate(0, 0, dy - 1.5f);
     }
 
     /**
-     * @return Whether this model actually exists, if this returns false,
-     *         things will often look for a different extension.
+     * @return Whether this model actually exists, if this returns false, things
+     *         will often look for a different extension.
      */
     boolean isValid();
 
@@ -95,7 +99,18 @@ public interface IModel
         material.transluscent = mat.transluscent;
         material.cull = mat.cull;
         material.shader = mat.shader;
-        for (final IExtendedModelPart part : this.getParts().values())
-            part.updateMaterial(mat, material);
+        if (!mat.tex.isBlank())
+        {
+            try
+            {
+                material.texture = mat.tex;
+                material.tex = new ResourceLocation(mat.tex);
+            }
+            catch (Exception e)
+            {
+                ThutCore.LOGGER.error(e);
+            }
+        }
+        for (final IExtendedModelPart part : this.getParts().values()) part.updateMaterial(mat, material);
     }
 }

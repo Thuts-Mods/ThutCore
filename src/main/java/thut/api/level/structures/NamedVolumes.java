@@ -6,8 +6,6 @@ import java.util.Map.Entry;
 import com.google.common.collect.Lists;
 
 import net.minecraft.core.BlockPos;
-import net.minecraft.core.BlockPos.MutableBlockPos;
-import net.minecraft.core.Registry;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.tags.TagKey;
@@ -16,8 +14,7 @@ import net.minecraft.world.level.levelgen.structure.PoolElementStructurePiece;
 import net.minecraft.world.level.levelgen.structure.Structure;
 import net.minecraft.world.level.levelgen.structure.StructurePiece;
 import net.minecraft.world.level.levelgen.structure.StructureStart;
-// import pokecube.world.gen.structures.pool_elements.ExpandedJigsawPiece;
-import thut.api.level.terrain.TerrainSegment;
+import thut.lib.RegHelper;
 
 public class NamedVolumes
 {
@@ -88,23 +85,8 @@ public class NamedVolumes
 
     private static boolean insideBox(final BoundingBox b, BlockPos pos, boolean forTerrain)
     {
-        if (!forTerrain) return b.isInside(pos);
-        final int x1 = pos.getX();
-        final int y1 = pos.getY();
-        final int z1 = pos.getZ();
-        MutableBlockPos mpos = new MutableBlockPos();
-        int s = TerrainSegment.GRIDSIZE;
-        int sy = TerrainSegment.YSHIFT;
-        int sz = TerrainSegment.ZSHIFT;
-        for (int i = 0; i < TerrainSegment.TOTAL; i++)
-        {
-            int x = x1 + i & s;
-            int y = y1 + (i / sy) & s;
-            int z = z1 + (i / sz) & s;
-            mpos.set(x, y, z);
-            if (b.isInside(mpos)) return true;
-        }
-        return false;
+        // TODO decide if we want to do something special for terrain checks?
+        return b.isInside(pos);
     }
 
     public static class NamedStructureWrapper implements INamedStructure
@@ -159,7 +141,7 @@ public class NamedVolumes
         public boolean is(String name)
         {
             if (INamedStructure.super.is(name)) return true;
-            var key = Registry.STRUCTURE_REGISTRY;
+            var key = RegHelper.STRUCTURE_REGISTRY;
             var tag = TagKey.create(key, new ResourceLocation(name));
             var registry = level.registryAccess().registryOrThrow(key);
             var opt_holder = registry.getHolder(registry.getId(this.feature));
@@ -195,13 +177,12 @@ public class NamedVolumes
         public StructurePiecePart(StructurePiece part, ServerLevel source)
         {
             this.part = part;
-            // if (source != null && part instanceof PoolElementStructurePiece p
-            //         && p.getElement() instanceof ExpandedJigsawPiece exp)
-            // {
-            //     this.name = exp.name;
-            // }
-            // else 
-            this.name = "unk_part";
+            if (source != null && part instanceof PoolElementStructurePiece p
+                    && p.getElement() instanceof INamedPart exp)
+            {
+                this.name = exp.getName();
+            }
+            else this.name = "unk_part";
         }
 
         @Override

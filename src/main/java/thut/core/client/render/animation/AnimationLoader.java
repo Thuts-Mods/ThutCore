@@ -2,6 +2,7 @@ package thut.core.client.render.animation;
 
 import java.io.FileNotFoundException;
 import java.io.InputStream;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -10,12 +11,10 @@ import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
 import javax.xml.namespace.QName;
 
+import org.joml.Vector3f;
 import org.w3c.dom.Node;
 
-import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
-import com.mojang.math.Quaternion;
-import com.mojang.math.Vector3f;
 
 import it.unimi.dsi.fastutil.objects.Object2ObjectOpenHashMap;
 import net.minecraft.client.Minecraft;
@@ -24,7 +23,6 @@ import thut.api.ModelHolder;
 import thut.api.entity.IAnimated.IAnimationHolder;
 import thut.api.entity.animation.Animation;
 import thut.api.maths.Vector3;
-import thut.api.maths.Vector4;
 import thut.core.client.render.animation.AnimationXML.CustomTex;
 import thut.core.client.render.animation.AnimationXML.Mat;
 import thut.core.client.render.animation.AnimationXML.Merge;
@@ -39,6 +37,7 @@ import thut.core.client.render.model.IModel;
 import thut.core.client.render.model.IModelRenderer;
 import thut.core.client.render.model.IModelRenderer.Vector5;
 import thut.core.client.render.model.parts.Material;
+import thut.core.client.render.model.parts.Part;
 import thut.core.client.render.texturing.IPartTexturer;
 import thut.core.client.render.texturing.TextureHelper;
 import thut.core.common.ThutCore;
@@ -67,58 +66,35 @@ public class AnimationLoader
         return vect;
     }
 
-    public static Vector5 getRotation(final String rotation, String time, final Vector5 default_)
+    public static Vector3f getRotation(final String rotation, final Vector3f default_)
     {
         if (rotation == null || rotation.isEmpty()) return default_;
-        time = time == null ? "0" : time;
 
-        final Vector4 ro = new Vector4();
-        int t = 0;
-        String[] r;
-        r = rotation.split(",");
-        try
+        float x = 0;
+        float y = 0;
+        float z = 0;
+        String[] r = rotation.split(",");
+        if (rotation.contains("x:") || rotation.contains("y:") || rotation.contains("z:"))
         {
-            if (rotation.contains("x:") || rotation.contains("y:") || rotation.contains("z:"))
+            for (String s : r)
             {
-                float x = 0;
-                float y = 0;
-                float z = 0;
-
-                for (String s : r)
+                s = s.trim();
+                if (s.contains("x:"))
                 {
-                    s = s.trim();
-                    if (s.contains("x:"))
-                    {
-                        x = Float.parseFloat(s.replace("x:", ""));
-                    }
-                    else if (s.contains("y:"))
-                    {
-                        y = Float.parseFloat(s.replace("y:", ""));
-                    }
-                    else if (s.contains("z:"))
-                    {
-                        z = Float.parseFloat(s.replace("z:", ""));
-                    }
+                    x = Float.parseFloat(s.replace("x:", ""));
                 }
-                final Quaternion quat = new Quaternion(0, 0, 0, 1);
-                if (z != 0) quat.mul(Vector3f.YN.rotationDegrees(z));
-                if (x != 0) quat.mul(Vector3f.XP.rotationDegrees(x));
-                if (y != 0) quat.mul(Vector3f.ZP.rotationDegrees(y));
-                ro.set(quat);
-            }
-            else
-            {
-                t = Integer.parseInt(time);
-                ro.set(Float.parseFloat(r[0].trim()), Float.parseFloat(r[1].trim()), Float.parseFloat(r[2].trim()),
-                        Float.parseFloat(r[3].trim()));
-                ro.toQuaternion();
+                else if (s.contains("y:"))
+                {
+                    y = Float.parseFloat(s.replace("y:", ""));
+                }
+                else if (s.contains("z:"))
+                {
+                    z = Float.parseFloat(s.replace("z:", ""));
+                }
             }
         }
-        catch (final Exception e)
-        {
-            ro.set(0, 0, 0, 1);
-        }
-        return new Vector5(ro, t);
+        else return default_;
+        return new Vector3f(x, y, z);
     }
 
     public static void parse(@Nonnull InputStream stream, @Nonnull ModelHolder holder, @Nonnull IModel model,
@@ -140,11 +116,11 @@ public class AnimationLoader
 
             if (file.model.customTex != null) file.model.customTex.init();
 
-            Vector5 noRotation = new Vector5();
+            Vector3f noRotation = new Vector3f();
 
             // Global model transforms
             Vector3 offset = new Vector3();
-            Vector5 rotation = noRotation;
+            Vector3f rotation = noRotation;
             Vector3 scale = new Vector3(1, 1, 1);
 
             // Custom tagged parts.
@@ -153,11 +129,11 @@ public class AnimationLoader
             final Set<String> dye = Sets.newHashSet();
 
             // Loaded animations
-            final List<Animation> tblAnims = Lists.newArrayList();
-            final Map<String, String> mergedAnimations = new Object2ObjectOpenHashMap<>();
+            final List<Animation> animations = new ArrayList<>();
+            final Map<String, List<String>> mergedAnimations = new Object2ObjectOpenHashMap<>();
             final Map<String, WornOffsets> wornOffsets = new Object2ObjectOpenHashMap<>();
             final Map<String, List<Vector5>> phaseList = new Object2ObjectOpenHashMap<>();
-            List<Phase> texPhases = Lists.newArrayList();
+            List<Phase> texPhases = new ArrayList<>();
 
             final Metadata meta = file.model.metadata;
             if (meta != null)
@@ -174,6 +150,7 @@ public class AnimationLoader
                 AnimationLoader.setHeadCaps(meta.headCap, headCaps);
                 AnimationLoader.setHeadCaps(meta.headCap1, headCaps1);
             }
+            final List<Animation> xmlAnimations = new ArrayList<>();
             for (final Phase phase : file.model.phases)
                 // Handle global, merges and presets
                 if (phase.name != null)
@@ -183,7 +160,7 @@ public class AnimationLoader
                 {
                     offset = AnimationLoader.getVector3(phase.values.get(new QName("offset")), offset);
                     scale = AnimationLoader.getVector3(phase.values.get(new QName("scale")), scale);
-                    rotation = AnimationLoader.getRotation(phase.values.get(new QName("rotation")), null, rotation);
+                    rotation = AnimationLoader.getRotation(phase.values.get(new QName("rotation")), rotation);
                 }
                 else if (name.equals("textures")) texPhases.add(phase);
                 else if (AnimationRegistry.animations.containsKey(name))
@@ -192,7 +169,7 @@ public class AnimationLoader
                     try
                     {
                         final Animation anim = AnimationRegistry.make(phase, null);
-                        if (anim != null) tblAnims.add(anim);
+                        if (anim != null) xmlAnimations.add(anim);
                     }
                     catch (final Exception e)
                     {
@@ -206,15 +183,33 @@ public class AnimationLoader
                 if (ThutCore.conf.debug_models)
                     ThutCore.LOGGER.debug("Building Animation " + phase.type + " for " + holder.name);
                 final Animation anim = AnimationBuilder.build(phase, model.getParts().keySet(), null);
-                if (anim != null) tblAnims.add(anim);
+                if (anim != null) xmlAnimations.add(anim);
             }
 
             // Handle merges
             for (final Merge merge : file.model.merges)
             {
                 final String[] merges = merge.merge.split("->");
-                mergedAnimations.put(ThutCore.trim(merges[0]), ThutCore.trim(merges[1]));
+                String key = ThutCore.trim(merges[0]);
+                List<String> toList = mergedAnimations.get(key);
+                if (toList == null) mergedAnimations.put(key, toList = new ArrayList<>());
+                toList.add(ThutCore.trim(merges[1]));
+                if (merge.limbs != null)
+                {
+                    for (String s : merge.limbs.split(":"))
+                    {
+                        var p = model.getParts().get(s);
+                        if (p instanceof Part part) part.isOverridenLimb = true;
+                    }
+                }
             }
+
+            if (renderer != null)
+            {
+                renderer.getAnimations().clear();
+                model.initBuiltInAnimations(renderer, animations);
+            }
+            animations.addAll(xmlAnimations);
 
             // Handle worn offsets.
             for (final Worn worn : file.model.worn)
@@ -227,8 +222,23 @@ public class AnimationLoader
                 wornOffsets.put(w_ident, new WornOffsets(w_parent, w_offset, w_scale, w_angles));
             }
 
+            CustomTex texs = file.model.customTex;
+            if (texs == null)
+            {
+                texs = new CustomTex();
+                if (holder.texture != null) texs.defaults = holder.texture.toString();
+            }
+
             // Handle materials
-            for (final Mat mat : file.model.materials) model.updateMaterial(mat);
+            for (final Mat mat : file.model.materials)
+            {
+                model.updateMaterial(mat);
+                if (mat.tex.isBlank()) continue;
+                TexPart part = new TexPart();
+                part.name = mat.name;
+                part.tex = mat.tex;
+                texs.parts.add(part);
+            }
 
             if (renderer != null) synchronized (renderer)
             {
@@ -245,18 +255,9 @@ public class AnimationLoader
                 if (animHolder != null) animHolder.clean();
 
                 // Handle customTextures
-                if (file.model.customTex != null)
-                {
-                    texturer.init(file.model.customTex);
-                    if (file.model.customTex.defaults != null) holder.texture = new ResourceLocation(
-                            holder.texture.toString().replace(holder.name, file.model.customTex.defaults));
-                }
-                else
-                {
-                    CustomTex tex = new CustomTex();
-                    tex.defaults = holder.texture.toString();
-                    texturer.init(tex);
-                }
+                texturer.init(texs);
+                if (texs.defaults != null) holder.texture = new ResourceLocation(texs.defaults);
+                texturer.init(texs);
 
                 // Apply texture phases (ie texture animations)
                 for (Phase p : texPhases) texturer.applyTexturePhase(p);
@@ -269,40 +270,47 @@ public class AnimationLoader
                 // Set the global transforms
                 renderer.setRotationOffset(offset);
                 renderer.setScale(scale);
-                renderer.setRotations(rotation);
 
                 model.getHeadParts().addAll(headNames);
 
                 // Cleanup the animation stuff.
-                for (final Animation anim : tblAnims)
+                for (final Animation anim : animations)
                 {
                     List<Animation> anims = renderer.getAnimations().get(anim.name);
-                    if (anims == null) renderer.getAnimations().put(anim.name, anims = Lists.newArrayList());
+                    if (anims == null) renderer.getAnimations().put(anim.name, anims = new ArrayList<>());
                     anims.add(anim);
                 }
                 for (final String from : mergedAnimations.keySet())
                 {
                     if (!renderer.getAnimations().containsKey(from)) continue;
-                    final String to = mergedAnimations.get(from);
-                    if (!renderer.getAnimations().containsKey(to)) continue;
-                    final List<Animation> fromSet = Lists.newArrayList();
-                    final List<Animation> toSet = renderer.getAnimations().get(to);
-                    for (final Animation anim : renderer.getAnimations().get(from))
+                    for (String to : mergedAnimations.get(from))
                     {
-                        final Animation newAnim = new Animation();
-                        newAnim.identifier = anim.identifier;
-                        newAnim.name = to;
-                        newAnim.loops = anim.loops;
-                        newAnim.priority = 20;
-                        newAnim.length = -1;
-                        for (final String s : anim.sets.keySet()) newAnim.sets.put(s, anim.sets.get(s));
-                        fromSet.add(newAnim);
+                        List<Animation> fromSet = new ArrayList<>();
+                        List<Animation> toSet = null;
+                        // In this case, we make an empty animation
+                        if (!renderer.getAnimations().containsKey(to))
+                        {
+                            toSet = new ArrayList<>();
+                            renderer.getAnimations().put(to, toSet);
+                        }
+                        else toSet = renderer.getAnimations().get(to);
+                        for (final Animation anim : renderer.getAnimations().get(from))
+                        {
+                            final Animation newAnim = new Animation();
+                            newAnim.identifier = anim.identifier;
+                            newAnim.name = to;
+                            newAnim.loops = anim.loops;
+                            newAnim.priority = 20;
+                            newAnim.length = -1;
+                            for (final String s : anim.sets.keySet()) newAnim.sets.put(s, anim.sets.get(s));
+                            fromSet.add(newAnim);
+                        }
+                        toSet.addAll(fromSet);
                     }
-                    toSet.addAll(fromSet);
                 }
 
                 // Finalize animation initialization
-                final List<Animation> allAnims = Lists.newArrayList();
+                final List<Animation> allAnims = new ArrayList<>();
                 // Process the animations
                 for (final List<Animation> anims : renderer.getAnimations().values())
                 {
@@ -323,6 +331,23 @@ public class AnimationLoader
 
                 // Initialize based on existing anims
                 animator.init(allAnims);
+                for (final Animation anim : allAnims)
+                {
+                    if (anim.name.contains("faint") || anim.name.contains("dead"))
+                    {
+                        anim.loops = false;
+                        anim.holdWhenDone = true;
+                    }
+
+                    if (!renderer.getAnimations().containsKey(anim.name))
+                    {
+                        List<Animation> anims = new ArrayList<>();
+                        renderer.getAnimations().put(anim.name, anims);
+                        anims.add(anim);
+                    }
+                }
+
+                // And if this added any new animations, update renderer
 
                 // Add the worn offsets
                 animator.parseWornOffsets(wornOffsets);
@@ -345,56 +370,53 @@ public class AnimationLoader
             else
             {
                 // Handle customTextures
-                if (file.model.customTex != null)
-                    if (file.model.customTex.defaults != null) holder.texture = holder.texture != null
-                            ? new ResourceLocation(
-                                    holder.texture.toString().replace(holder.name, file.model.customTex.defaults))
-                            : new ResourceLocation(holder.model.getNamespace(), file.model.customTex.defaults);
+                if (texs.defaults != null) holder.texture = holder.texture != null
+                        ? new ResourceLocation(holder.texture.toString().replace(holder.name, texs.defaults))
+                        : new ResourceLocation(holder.model.getNamespace(), texs.defaults);
 
                 for (IExtendedModelPart p : model.getParts().values())
                 {
                     // Handle customTextures
-                    if (file.model.customTex != null)
+                    if (texs.defaults != null) holder.texture = holder.texture != null
+                            ? new ResourceLocation(holder.texture.toString().replace(holder.name, texs.defaults))
+                            : new ResourceLocation(holder.model.getNamespace(), texs.defaults);
+                    List<String> matNames = new ArrayList<>();
+                    for (TexPart part : texs.parts)
                     {
-                        if (file.model.customTex.defaults != null) holder.texture = holder.texture != null
-                                ? new ResourceLocation(
-                                        holder.texture.toString().replace(holder.name, file.model.customTex.defaults))
-                                : new ResourceLocation(holder.model.getNamespace(), file.model.customTex.defaults);
-                        List<String> matNames = Lists.newArrayList();
-                        for (TexPart part : file.model.customTex.parts)
+
+                        ResourceLocation tex = part.tex.contains(":") ? new ResourceLocation(part.tex)
+                                : new ResourceLocation(holder.model.getNamespace(), part.tex);
+                        if (p.getName().equals(part.name))
                         {
-                            ResourceLocation tex = new ResourceLocation(holder.model.getNamespace(), part.tex);
-                            if (p.getName().equals(part.name))
+                            for (Material m3 : p.getMaterials())
                             {
-                                for (Material m3 : p.getMaterials())
-                                {
-                                    m3.tex = tex;
-                                    matNames.add(m3.name);
-                                }
-                            }
-                            else
-                            {
-                                // In this case, we convert to a Material
-                                Material m = new Material(part.name);
-                                m.tex = tex;
-                                Mat m2 = new Mat();
-                                m2.name = part.name;
-                                p.updateMaterial(m2, m);
-                                matNames.add(part.name);
+                                m3.tex = tex;
+                                matNames.add(m3.name);
                             }
                         }
-                        // Now do the same for the base material
-                        if (file.model.customTex.defaults != null) for (Material m : p.getMaterials())
+                        else
                         {
-                            if (matNames.contains(m.name)) continue;
-                            m.tex = holder.texture;
+                            // In this case, we convert to a Material
+                            Material m = new Material(part.name);
+                            m.tex = tex;
+                            Mat m2 = new Mat();
+                            m2.name = part.name;
+                            p.updateMaterial(m2, m);
+                            matNames.add(part.name);
                         }
                     }
+                    // Now do the same for the base material
+                    if (texs.defaults != null) for (Material m : p.getMaterials())
+                    {
+                        if (matNames.contains(m.name)) continue;
+                        m.tex = holder.texture;
+                    }
+
                     if (p.getParent() == null)
                     {
                         p.setPreScale(scale);
                         p.setPreTranslations(offset);
-                        if (noRotation != rotation) p.setPreRotations(rotation.rotations);
+                        if (noRotation != rotation) p.setDefaultAngles(rotation.x(), rotation.y(), rotation.z());
                     }
                 }
 

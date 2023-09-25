@@ -1,12 +1,14 @@
 package thut.core.client.render.particle;
 
+import org.joml.Quaternionf;
+
 import com.mojang.blaze3d.systems.RenderSystem;
 import com.mojang.blaze3d.vertex.BufferBuilder;
 import com.mojang.blaze3d.vertex.DefaultVertexFormat;
 import com.mojang.blaze3d.vertex.Tesselator;
 import com.mojang.blaze3d.vertex.VertexConsumer;
 import com.mojang.blaze3d.vertex.VertexFormat;
-import com.mojang.math.Quaternion;
+import com.mojang.math.Axis;
 
 import net.minecraft.client.Camera;
 import net.minecraft.client.multiplayer.ClientLevel;
@@ -91,13 +93,13 @@ public class ParticleFactories
             final float z = (float) (Mth.lerp(partialTicks, this.zo, this.z) - vec3d.z());
             final Vec3f source = new Vec3f(x, y, z);
 
-            Quaternion quaternion;
+            Quaternionf quaternion;
             if (this.roll == 0.0F) quaternion = renderInfo.rotation();
             else
             {
-                quaternion = new Quaternion(renderInfo.rotation());
+                quaternion = new Quaternionf(renderInfo.rotation());
                 final float f3 = Mth.lerp(partialTicks, this.oRoll, this.roll);
-                quaternion.mul(com.mojang.math.Vector3f.ZP.rotation(f3));
+                quaternion.mul(Axis.ZP.rotation(f3));
             }
 
             this.particle.renderParticle(buffer, renderInfo, partialTicks, source);

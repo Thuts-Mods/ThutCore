@@ -1,26 +1,27 @@
-buildscript {
-    repositories {
-        maven { url = 'https://files.minecraftforge.net/maven' }
-        jcenter()
-        mavenCentral()
-        flatDir {
-          dirs 'libs'
-        }
-        maven {url='https://repo.spongepowered.org/repository/maven-public/'}
-    }
-    dependencies {
-        classpath group: 'net.minecraftforge.gradle', name: 'ForgeGradle', version: '5.+', changing: true
-        classpath 'org.spongepowered:mixingradle:0.7-SNAPSHOT'
-    }
-}
-
 plugins {
-  id 'org.ajoberstar.grgit' version '2.3.0'
+    id 'eclipse'
+    id 'idea'
+    id 'maven-publish'
+    id 'org.ajoberstar.grgit' version '2.3.0'
+    id 'net.neoforged.gradle' version '[6.0.18,6.2)'
+    id 'org.spongepowered.mixin' version '0.7.+'
 }
 
-apply plugin: 'net.minecraftforge.gradle'
-apply plugin: 'eclipse'
-apply plugin: 'maven-publish'
+repositories {
+    maven {
+        url "https://cursemaven.com"
+        content {
+            includeGroup "curse.maven"
+        }
+    }
+    maven { url "https://maven.neoforged.net/releases" }
+    maven { url = 'https://repo.spongepowered.org/repository/maven-public/' }
+    mavenCentral()
+    jcenter()
+    flatDir {
+        dir 'libs'
+    }
+}
 
 ext {
     VERSION_COMPILE = gitVersion("${version_major}.${version_minor}")
@@ -89,20 +90,27 @@ minecraft {
 }
 
 dependencies {
-    minecraft "net.minecraftforge:forge:${version_minecraft}-${version_forge}"
+    minecraft "net.neoforged:forge:${version_minecraft}-${version_forge}"
 }
 
-jar {
+// Example for how to get properties into the manifest for reading at runtime.
+tasks.named('jar', Jar).configure {
     manifest {
-        attributes 'FMLAT': 'accesstransformer.cfg',
-        "Specification-Title": "${compile_name}",
-        "Specification-Vendor": "${author_name}",
-        "Specification-Version": VERSION_COMPILE,
-        "Implementation-Title": project.name,
-        "Implementation-Version": VERSION_COMPILE,
-        "Implementation-Vendor" :"${author_name}",
-        "Implementation-Timestamp": new Date().format("yyyy-MM-dd'T'HH:mm:ssZ")
+        attributes([
+	        'FMLAT': 'accesstransformer.cfg',
+	        "Specification-Title": "${compile_name}",
+	        "Specification-Vendor": "${author_name}",
+	        "Specification-Version": VERSION_COMPILE,
+	        "Implementation-Title": project.name,
+	        "Implementation-Version": VERSION_COMPILE,
+	        "Implementation-Vendor" :"${author_name}",
+	        "Implementation-Timestamp": new Date().format("yyyy-MM-dd'T'HH:mm:ssZ"),
+	        "MixinConfigs": "pokecube.mixins.json"
+        ])
     }
+
+    // This is the preferred method to reobfuscate your jar file
+    finalizedBy 'reobfJar'
 }
 
 processResources.doLast {
@@ -112,28 +120,6 @@ processResources.doLast {
 
 def replaceParameters(filename, find, replace) {
     ant.replace(file:filename,token:find,value:replace)
-}
-
-task sourcesJar(type: Jar) {
-	classifier = "sources"
-	from sourceSets.main.allJava
-}
-
-task deobfJar(type: Jar) {	
-    classifier = 'deobf'
-    from sourceSets.main.output	
-}
-
-task serverJar(type: Jar) {	
-    classifier = 'server'
-    from sourceSets.main.output	
-    exclude '**/assets/*'
-}
-
-artifacts {
-	archives sourcesJar
-    archives deobfJar
-    reobf { serverJar {}}
 }
 
 def cleanTOML()

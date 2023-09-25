@@ -5,12 +5,11 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
-import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
-import com.mojang.math.Quaternion;
+import com.mojang.blaze3d.vertex.PoseStack;
+import com.mojang.math.Axis;
 
 import thut.api.maths.Vector4;
-import thut.core.client.render.bbmodel.BBModelTemplate.BBModelBox;
 import thut.core.client.render.bbmodel.BBModelTemplate.Element;
 import thut.core.client.render.bbmodel.BBModelTemplate.IBBPart;
 import thut.core.client.render.bbmodel.BBModelTemplate.JsonGroup;
@@ -20,6 +19,7 @@ import thut.core.client.render.model.parts.Material;
 import thut.core.client.render.model.parts.Mesh;
 import thut.core.client.render.model.parts.Part;
 import thut.core.client.render.texturing.TextureCoordinate;
+import thut.core.client.render.x3d.X3dMesh;
 import thut.core.common.ThutCore;
 
 public class BBModelPart extends Part
@@ -50,7 +50,7 @@ public class BBModelPart extends Part
                 allShapes.addAll(shapes);
             }
         }
-        BBModelPart root = make(allShapes, nextName(names, group), group, -1, parentOffsets);
+        BBModelPart root = make(t, allShapes, nextName(names, group), group, -1, parentOffsets);
         ours.add(root);
         parts.add(root);
         // then handle groups
@@ -71,11 +71,12 @@ public class BBModelPart extends Part
         children.addAll(ours);
     }
 
-    private static BBModelPart make(List<Mesh> shapes, String name, IBBPart b, int index, float[] parentOffsets)
+    private static BBModelPart make(BBModelTemplate template, List<Mesh> shapes, String name, IBBPart b, int index,
+            float[] parentOffsets)
     {
         BBModelPart part = new BBModelPart(name);
         part.index = index;
-        shapes.forEach(part::addShape);
+        part.setShapes(shapes);
         float[] offsets = b.getOrigin().clone();
         for (int i = 0; i < 3; i++)
         {
@@ -84,19 +85,17 @@ public class BBModelPart extends Part
         if (b.getRotation() != null)
         {
             float x = b.getRotation()[0];
-            float y = b.getRotation()[2];
-            float z = -b.getRotation()[1];
-            Quaternion quat = new Quaternion(x, y, z, true);
-            final Vector4 rotations = new Vector4(quat);
-            part.rotations.set(rotations.x, rotations.y, rotations.z, rotations.w);
+            float y = b.getRotation()[1];
+            float z = b.getRotation()[2];
+            part.rotations.set(x, y, z, 1);
         }
 
-        offsets[0] /= 16;
-        offsets[1] /= 16;
-        offsets[2] /= 16;
+        offsets[0] /= 16.0f;
+        offsets[1] /= 16.0f;
+        offsets[2] /= 16.0f;
 
         float[] use = offsets.clone();
-        use[0] = -offsets[0];
+        use[0] = offsets[0];
         use[1] = -offsets[2];
         use[2] = offsets[1];
 
@@ -108,41 +107,16 @@ public class BBModelPart extends Part
     {
         List<Mesh> shapes = new ArrayList<>();
 
-        Map<String, List<List<Object>>> materials = Maps.newHashMap();
+        Map<String, List<List<Object>>> quads_materials = Maps.newHashMap();
+        Map<String, List<List<Object>>> tris_materials = Maps.newHashMap();
 
-        BBModelBox box = new BBModelBox(t, b);
+        b.toMeshs(t, quads_materials, tris_materials);
 
-        boolean bedrock = t.meta.model_format.equals("bedrock");
-        for (var face : box.faces)
-        {
-            if (face == null) continue;
-            List<Object> order = Lists.newArrayList();
-            List<Object> verts = Lists.newArrayList();
-            List<Object> tex = Lists.newArrayList();
-            String material = t.textures.get(face.texture).name;
-            if (materials.containsKey(material))
-            {
-                List<List<Object>> lists = materials.get(material);
-                order = lists.get(0);
-                verts = lists.get(1);
-                tex = lists.get(2);
-            }
-            for (int i = 0; i < 4; i++)
-            {
-                int index = i;
-                if (bedrock) index = 3 - i;
+        if (quads_materials.isEmpty() && tris_materials.isEmpty())
+            ThutCore.logDebug("No parts for " + t.name + " " + b.name);
+        Map<String, Material> mats = Maps.newHashMap();
 
-                Integer o = order.size();
-                Vertex v = face.points[index];
-                var tx = face.tex[index];
-                order.add(o);
-                verts.add(v);
-                tex.add(tx);
-            }
-            materials.put(material, Lists.newArrayList(order, verts, tex));
-        }
-
-        materials.forEach((key, lists) -> {
+        quads_materials.forEach((key, lists) -> {
             List<Object> order = lists.get(0);
             List<Object> verts = lists.get(1);
             List<Object> tex = lists.get(2);
@@ -150,17 +124,90 @@ public class BBModelPart extends Part
                     tex.toArray(new TextureCoordinate[0]));
             m.name = ThutCore.trim(key);
             Material mat = new Material(m.name);
+            mats.put(m.name, mat);
+            if (b.box_uv || t.meta.box_uv) mat.cull = true;
             m.setMaterial(mat);
             shapes.add(m);
         });
+
+        tris_materials.forEach((key, lists) -> {
+            List<Object> order = lists.get(0);
+            List<Object> verts = lists.get(1);
+            List<Object> tex = lists.get(2);
+            Mesh m = new X3dMesh(order.toArray(new Integer[0]), verts.toArray(new Vertex[0]), null,
+                    tex.toArray(new TextureCoordinate[0]));
+            m.name = ThutCore.trim(key);
+            Material mat = mats.getOrDefault(m.name, new Material(m.name));
+            if (b.box_uv || t.meta.box_uv) mat.cull = true;
+            m.setMaterial(mat);
+            shapes.add(m);
+        });
+
         return shapes;
     }
 
     public int index = 0;
+    private float rx = 0, ry = 0, rz = 0;
 
     public BBModelPart(String name)
     {
         super(name + "");
+    }
+
+    @Override
+    public void setPreRotations(Vector4 angles)
+    {
+        this.preRot.mul(angles, rotations);
+    }
+
+    @Override
+    public void resetToInit()
+    {
+        super.resetToInit();
+        rx = ry = rz = 0;
+    }
+    
+    @Override
+    public void setDefaultAngles(float rx, float ry, float rz)
+    {
+        this.rotations.x += rx;
+        this.rotations.y += ry;
+        this.rotations.z += rz;
+    }
+
+    @Override
+    public void setAnimAngles(float rx, float ry, float rz)
+    {
+        this.rx = rx;
+        this.ry = ry;
+        this.rz = rz;
+    }
+
+    @Override
+    public void preRender(PoseStack mat)
+    {
+        if (this.getParent() != null) getParent().preRender(mat);
+
+        mat.pushPose();
+
+        // Translate of offset for rotation.
+        mat.translate(this.preTrans.x, this.preTrans.y, this.preTrans.z);
+        mat.scale(this.preScale.x, this.preScale.y, this.preScale.z);
+
+        float rx = this.rx + rotations.x;
+        float ry = this.ry + rotations.y;
+        float rz = this.rz + rotations.z;
+
+        if (rz != 0) mat.mulPose(Axis.YN.rotationDegrees(rz));
+        if (ry != 0) mat.mulPose(Axis.ZP.rotationDegrees(ry));
+        if (rx != 0) mat.mulPose(Axis.XP.rotationDegrees(rx));
+
+        // Translate by post-PreOffset amount.
+        mat.translate(this.postTrans.x, this.postTrans.y, this.postTrans.z);
+        // Apply postRotation
+        this.postRot.glRotate(mat);
+        // Scale
+        mat.scale(this.scale.x, this.scale.y, this.scale.z);
     }
 
     @Override
