@@ -63,4 +63,28 @@ public class ResourceHelper
             return false;
         }
     }
+
+    public static InputStream getStream(Resource r)
+    {
+        try
+        {
+            return r.open();
+        }
+        catch (IOException e)
+        {
+            return null;
+        }
+    }
+
+    public static BufferedReader getReader(Resource r)
+    {
+        try
+        {
+            return r.openAsReader();
+        }
+        catch (IOException e)
+        {
+            return null;
+        }
+    }
 }

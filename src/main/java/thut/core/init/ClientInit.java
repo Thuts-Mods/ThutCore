@@ -29,6 +29,7 @@ import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.biome.Biome;
+import net.minecraft.world.level.levelgen.structure.Structure;
 import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.BlockHitResult;
 import net.minecraft.world.phys.HitResult.Type;
@@ -40,20 +41,22 @@ import net.minecraftforge.client.event.RenderHandEvent;
 import net.minecraftforge.client.event.RenderLevelStageEvent;
 import net.minecraftforge.client.event.RenderLevelStageEvent.Stage;
 import net.minecraftforge.client.event.RenderLivingEvent;
+import net.minecraftforge.client.event.ViewportEvent.ComputeCameraAngles;
 import net.minecraftforge.eventbus.api.EventPriority;
 import net.minecraftforge.eventbus.api.SubscribeEvent;
 import net.minecraftforge.fml.common.Mod;
 import net.minecraftforge.fml.event.lifecycle.FMLClientSetupEvent;
 import thut.api.entity.CopyCaps;
 import thut.api.entity.ICopyMob;
+import thut.api.level.structures.NamedVolumes.INamedStructure;
+import thut.api.level.structures.StructureManager;
+import thut.api.level.terrain.BiomeType;
+import thut.api.level.terrain.TerrainManager;
+import thut.api.level.terrain.TerrainSegment;
 import thut.api.maths.Vector3;
 import thut.api.particle.ThutParticles;
-import thut.api.terrain.BiomeType;
-import thut.api.terrain.StructureManager;
-import thut.api.terrain.StructureManager.StructureInfo;
-import thut.api.terrain.TerrainManager;
-import thut.api.terrain.TerrainSegment;
 import thut.core.client.gui.NpcScreen;
+import thut.core.client.render.model.parts.Mesh;
 import thut.core.client.render.particle.ParticleFactories;
 import thut.core.client.render.wrappers.ModelWrapper;
 import thut.core.common.ThutCore;
@@ -97,6 +100,17 @@ public class ClientInit
     }
 
     @SubscribeEvent
+    public static void onRenderSetup(ComputeCameraAngles event)
+    {
+//        Tracker.timerEnd("render time", 5000);
+        Mesh.windowScale = (float) Math.sqrt(Minecraft.getInstance().getWindow().getScreenHeight()
+                * Minecraft.getInstance().getWindow().getScreenWidth() * 1e-3f);
+        Mesh.verts = 0;
+        Mesh.modelCullThreshold = ThutCore.getConfig().modelCullThreshold;
+//        Tracker.timerStart();
+    }
+
+    @SubscribeEvent
     public static void textOverlay(final CustomizeGuiOverlayEvent.DebugText event)
     {
         final boolean debug = Minecraft.getInstance().options.renderDebug;
@@ -112,15 +126,19 @@ public class ClientInit
         Level level = Minecraft.getInstance().level;
 
         var regi = level.registryAccess().registry(Registry.STRUCTURE_REGISTRY);
-        Set<StructureInfo> structures = StructureManager.getNear(level.dimension(), v.getPos(), 5);
+        Set<INamedStructure> structures = StructureManager.getNear(level.dimension(), v.getPos(), 5, true);
         if (regi.isPresent())
         {
             for (var info : structures)
             {
-                var tags = regi.get().getHolderOrThrow(regi.get().getResourceKey(info.feature).get()).tags().toList();
-                List<ResourceLocation> keys = Lists.newArrayList();
-                for (var tag : tags) if (!tag.toString().contains(":mixin_")) keys.add(tag.location());
-                event.getLeft().add(info.getName() + " " + keys);
+                Object o = info.getWrapped();
+                if (o instanceof Structure feature)
+                {
+                    var tags = regi.get().getHolderOrThrow(regi.get().getResourceKey(feature).get()).tags().toList();
+                    List<ResourceLocation> keys = Lists.newArrayList();
+                    for (var tag : tags) if (!tag.toString().contains(":mixin_")) keys.add(tag.location());
+                    event.getLeft().add(info.getName() + " " + keys);
+                }
             }
         }
         if (Screen.hasAltDown())
@@ -135,15 +153,9 @@ public class ClientInit
 
     }
 
-    static BiomeType getSubbiome(final ItemStack held)
+    static boolean isCustomStick(final ItemStack held)
     {
-        if (held.getHoverName().getString().toLowerCase(Locale.ROOT).startsWith("subbiome->"))
-        {
-            final String[] args = held.getHoverName().getString().split("->");
-            if (args.length != 2) return null;
-            return BiomeType.getBiome(args[1].trim());
-        }
-        return null;
+        return held.getHoverName().getString().toLowerCase(Locale.ROOT).contains("->");
     }
 
     @SubscribeEvent(priority = EventPriority.HIGHEST)
@@ -189,7 +201,7 @@ public class ClientInit
         if (!(held = player.getMainHandItem()).isEmpty() || !(held = player.getOffhandItem()).isEmpty())
         {
             final Minecraft mc = Minecraft.getInstance();
-            if (ClientInit.getSubbiome(held) != null && held.getTag() != null && held.getTag().contains("min"))
+            if (ClientInit.isCustomStick(held) && held.getTag() != null && held.getTag().contains("min"))
             {
                 final Vec3 projectedView = mc.gameRenderer.getMainCamera().getPosition();
                 Vec3 pointed = new Vec3(projectedView.x, projectedView.y, projectedView.z)
