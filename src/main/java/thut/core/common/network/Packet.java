@@ -1,37 +1,52 @@
 package thut.core.common.network;
 
-import java.util.function.Supplier;
-
 import net.minecraft.network.FriendlyByteBuf;
+import net.minecraft.network.codec.StreamCodec;
+import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
 import net.minecraft.server.level.ServerPlayer;
-import net.minecraftforge.network.NetworkEvent;
+import net.minecraft.world.entity.player.Player;
+import net.neoforged.neoforge.network.handling.IPayloadContext;
+import net.neoforged.neoforge.network.handling.IPayloadHandler;
 import thut.core.common.ThutCore;
 
 public abstract class Packet
+        implements CustomPacketPayload, IPayloadHandler<Packet>, StreamCodec<FriendlyByteBuf, Packet>
 {
     public Packet()
-    {
-    }
+    {}
 
-    public Packet(FriendlyByteBuf buffer)
+    @Override
+    public Packet decode(FriendlyByteBuf buffer)
     {
-    }
-
-    public void handle(Supplier<NetworkEvent.Context> ctx)
-    {
-        ctx.get().enqueueWork(() ->
+        try
         {
-            final ServerPlayer player = ctx.get().getSender();
-            if (ThutCore.proxy.isClientSide()) this.handleClient();
-            else this.handleServer(player);
-        });
-        ctx.get().setPacketHandled(true);
+            Packet resp = this.getClass().getConstructor().newInstance();
+            resp.read(buffer);
+            return resp;
+        }
+        catch (Exception e)
+        {
+            throw new RuntimeException(e);
+        }
+    }
+
+    @Override
+    public void encode(FriendlyByteBuf buffer, Packet value)
+    {
+        value.write(buffer);
+    }
+
+    public void handle(Packet payload, IPayloadContext context)
+    {
+        var player = context.player();
+        if (ThutCore.proxy.isClientSide()) payload.handleClient(player);
+        else payload.handleServer((ServerPlayer) player);
     }
 
     /*
      * Handles client side interaction.
      */
-    public void handleClient()
+    public void handleClient(Player player)
     {
 
     }
@@ -50,4 +65,6 @@ public abstract class Packet
      * @param buffer
      */
     public abstract void write(FriendlyByteBuf buffer);
+
+    public abstract void read(FriendlyByteBuf buffer);
 }

@@ -1,9 +1,20 @@
 package thut.api.world.mobs.data;
 
 import io.netty.buffer.ByteBuf;
+import net.minecraft.core.HolderLookup;
 
 public interface Data<T>
 {
+    void setSync(DataSync sync);
+
+    String getTag();
+
+    Data<T> setTag(String tag);
+
+    String getName();
+
+	void setHolderLookup(HolderLookup.Provider provider);
+		
     boolean dirty();
 
     T get();
@@ -14,7 +25,7 @@ public interface Data<T>
 
     void read(ByteBuf buf);
 
-    void set(T value);
+    Data<T> set(T value);
 
     void setDirty(boolean dirty);
 
@@ -27,4 +38,6 @@ public interface Data<T>
     boolean isRealtime();
 
     Data<T> setRealtime();
+
+    void setRaw(Object value);
 }

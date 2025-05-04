@@ -350,11 +350,11 @@ public class JsonPart extends Part
                 try
                 {
                     String texture = t.textures.get(key).getAsString();
-                    mat.tex = new ResourceLocation(texture);
+                    mat.tex = ResourceLocation.parse(texture);
                     if (!mat.tex.toString().contains("textures/"))
-                        mat.tex = new ResourceLocation(mat.tex.getNamespace(), "textures/" + mat.tex.getPath());
+                        mat.tex = ResourceLocation.fromNamespaceAndPath(mat.tex.getNamespace(), "textures/" + mat.tex.getPath());
                     if (!mat.tex.toString().contains(".png"))
-                        mat.tex = new ResourceLocation(mat.tex.getNamespace(), mat.tex.getPath() + ".png");
+                        mat.tex = ResourceLocation.fromNamespaceAndPath(mat.tex.getNamespace(), mat.tex.getPath() + ".png");
                 }
                 catch (Exception e)
                 {

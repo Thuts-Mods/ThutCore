@@ -1,6 +1,5 @@
 package thut.api.level.terrain;
 
-import it.unimi.dsi.fastutil.ints.Int2BooleanArrayMap;
 import it.unimi.dsi.fastutil.ints.Int2IntMap;
 import it.unimi.dsi.fastutil.ints.Int2IntOpenHashMap;
 import it.unimi.dsi.fastutil.ints.Int2ObjectArrayMap;
@@ -8,30 +7,28 @@ import it.unimi.dsi.fastutil.ints.IntOpenHashSet;
 import it.unimi.dsi.fastutil.ints.IntSet;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.BlockPos.MutableBlockPos;
-import net.minecraft.core.Direction;
+import net.minecraft.core.HolderLookup;
 import net.minecraft.core.SectionPos;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.ListTag;
-import net.minecraft.world.level.Level;
+import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.level.chunk.ChunkAccess;
-import net.minecraftforge.common.capabilities.Capability;
-import net.minecraftforge.common.capabilities.ICapabilityProvider;
-import net.minecraftforge.common.util.INBTSerializable;
-import net.minecraftforge.common.util.LazyOptional;
-import thut.api.ThutCaps;
+import net.neoforged.neoforge.attachment.AttachmentType;
+import net.neoforged.neoforge.attachment.IAttachmentHolder;
+import net.neoforged.neoforge.common.util.INBTSerializable;
+import net.neoforged.neoforge.registries.DeferredRegister;
+
+import java.util.function.Consumer;
+import java.util.function.Supplier;
 
 public class CapabilityTerrain
 {
-    public static class DefaultProvider implements ITerrainProvider, ICapabilityProvider, INBTSerializable<CompoundTag>
+    public static class DefaultProvider implements ITerrainProvider
     {
-        private final LazyOptional<ITerrainProvider> holder = LazyOptional.of(() -> this);
-
         private BlockPos pos;
         private ChunkAccess chunk;
 
         Int2ObjectArrayMap<TerrainSegment> segMap = new Int2ObjectArrayMap<>();
-
-        Int2BooleanArrayMap reals = new Int2BooleanArrayMap();
 
         MutableBlockPos mutable = new MutableBlockPos();
 
@@ -48,50 +45,50 @@ public class CapabilityTerrain
         }
 
         @Override
-        public void deserializeNBT(final CompoundTag nbt)
+        public void apply(Consumer<TerrainSegment> applier)
         {
-            final BlockPos pos = this.getChunkPos();
-            final int x = pos.getX();
-            final int z = pos.getZ();
-            final Int2IntMap toUpdate = new Int2IntOpenHashMap();
-            ListTag tags = (ListTag) nbt.get("ids");
-            for (int i = 0; i < tags.size(); i++)
-            {
-                final CompoundTag tag = tags.getCompound(i);
-                final String name = tag.getString("name");
-                final int id = tag.getInt("id");
-                final BiomeType type = BiomeType.getBiome(name, true);
-                final int newId = type.getType();
-                if (newId != id) toUpdate.put(id, type.getType());
-            }
-            final boolean hasReplacements = !toUpdate.isEmpty();
+            segMap.values().forEach(applier);
+        }
 
+        @Override
+        public void deserializeNBT(HolderLookup.Provider registries, final CompoundTag nbt)
+        {
             if (nbt.contains("segs"))
             {
+                final BlockPos pos = this.getChunkPos();
+                final int x = pos.getX();
+                final int z = pos.getZ();
+                final Int2IntMap toUpdate = new Int2IntOpenHashMap();
+                ListTag tags = (ListTag) nbt.get("ids");
+                for (int i = 0; i < tags.size(); i++)
+                {
+                    final CompoundTag tag = tags.getCompound(i);
+                    final String name = tag.getString("name");
+                    final int id = tag.getInt("id");
+                    final BiomeType type = BiomeType.getBiome(name, true);
+                    final int newId = type.getType();
+                    if (newId != id) toUpdate.put(id, type.getType());
+                }
+                final boolean hasReplacements = !toUpdate.isEmpty();
                 tags = (ListTag) nbt.get("segs");
                 for (int i = 0; i < tags.size(); i++)
                 {
-                    TerrainSegment t = null;
+                    TerrainSegment t;
                     final CompoundTag terrainTag = tags.getCompound(i);
                     if (!terrainTag.isEmpty() && !TerrainSegment.noLoad)
                     {
                         final int y = terrainTag.getInt("y");
                         t = new TerrainSegment(x, y, z);
+                        t.chunk = this.chunk;
                         if (hasReplacements) t.idReplacements = toUpdate;
                         TerrainSegment.readFromNBT(t, terrainTag);
                         this.setTerrainSegment(t, y);
                         t.idReplacements = null;
-                        this.reals.put(i, true);
                     }
                 }
+                this.chunk.setUnsaved(true);
 
             }
-        }
-
-        @Override
-        public <T> LazyOptional<T> getCapability(final Capability<T> cap, final Direction side)
-        {
-            return ThutCaps.TERRAIN_PROVIDER.orEmpty(cap, this.holder);
         }
 
         @Override
@@ -105,52 +102,29 @@ public class CapabilityTerrain
         public TerrainSegment getTerrainSegment(final BlockPos blockLocation)
         {
             final int chunkY = SectionPos.blockToSectionCoord(blockLocation.getY());
-            final TerrainSegment segment = this.getTerrainSegment(chunkY);
-            return segment;
+            return this.getTerrainSegment(chunkY);
         }
 
         @Override
         public TerrainSegment getTerrainSegment(final int chunkY)
         {
-            if (this.reals.get(chunkY) && this.segMap.containsKey(chunkY))
+            if (this.segMap.containsKey(chunkY))
             {
                 final TerrainSegment ret = this.segMap.get(chunkY);
-                ret.real = true;
                 ret.chunk = this.chunk;
                 return ret;
             }
-
             // The pos for this segment
             this.mutable.set(this.chunk.getPos().x, chunkY, this.chunk.getPos().z);
-            final BlockPos pos = this.mutable;
-
             // Try to pull it from our array
-            TerrainSegment ret = this.segMap.get(chunkY);
-            // try to find any cached variants if they exist
-            final TerrainSegment cached = thut.api.level.terrain.ITerrainProvider
-                    .removeCached(((Level) this.chunk.getWorldForge()).dimension(), this.chunk.getPos(), chunkY);
-
-            // If not found, make a new one, or use cached
-            if (ret == null)
-            {
-                if (cached != null) ret = cached;
-                else ret = new TerrainSegment(pos.getX(), pos.getY(), pos.getZ());
-            }
-            // If there is a cached version, lets merge over into it.
-            else if (cached != null) for (int i = 0; i < cached.biomes.length; i++)
-                if (ret.biomes[i] == -1) ret.biomes[i] = cached.biomes[i];
-
-            // Let the segment know what chunk it goes with, and that it is
-            // actually real.
+            TerrainSegment ret = new TerrainSegment(mutable.getX(), mutable.getY(), mutable.getZ());
             ret.chunk = this.chunk;
-            ret.real = true;
-            this.reals.put(chunkY, true);
             this.segMap.put(chunkY, ret);
             return ret;
         }
 
         @Override
-        public CompoundTag serializeNBT()
+        public CompoundTag serializeNBT(HolderLookup.Provider registries)
         {
             final CompoundTag nbt = new CompoundTag();
             final IntSet ids = new IntOpenHashSet();
@@ -159,23 +133,29 @@ public class CapabilityTerrain
             {
                 final TerrainSegment t = this.getTerrainSegment(i);
                 if (t == null) continue;
-                if (!t.toSave) continue;
-                for (final int id : t.biomes) ids.add(id);
+                t.checkToSave();
                 final CompoundTag terrainTag = new CompoundTag();
                 t.saveToNBT(terrainTag);
-                segs.add(terrainTag);
+                if (!terrainTag.isEmpty())
+                {
+                    for (final int id : t.biomes) ids.add(id);
+                    segs.add(terrainTag);
+                }
             }
-            nbt.put("segs", segs);
-            final ListTag biomeList = new ListTag();
-            for (final BiomeType t : BiomeType.values())
+            if (!segs.isEmpty())
             {
-                if (!ids.contains(t.getType())) continue;
-                final CompoundTag tag = new CompoundTag();
-                tag.putString("name", t.name);
-                tag.putInt("id", t.getType());
-                biomeList.add(tag);
+                nbt.put("segs", segs);
+                final ListTag biomeList = new ListTag();
+                for (final BiomeType t : BiomeType.values())
+                {
+                    if (!ids.contains(t.getType())) continue;
+                    final CompoundTag tag = new CompoundTag();
+                    tag.putString("name", t.name);
+                    tag.putInt("id", t.getType());
+                    biomeList.add(tag);
+                }
+                if (!ids.isEmpty()) nbt.put("ids", biomeList);
             }
-            nbt.put("ids", biomeList);
             return nbt;
         }
 
@@ -197,5 +177,28 @@ public class CapabilityTerrain
         void setTerrainSegment(TerrainSegment segment, int chunkY);
 
         ITerrainProvider setChunk(final ChunkAccess chunk);
+
+        void apply(Consumer<TerrainSegment> applier);
+    }
+
+    public static ITerrainProvider makeProvider(final IAttachmentHolder in)
+    {
+        if (!(in instanceof ChunkAccess chunk)) return null;
+        return new DefaultProvider(chunk);
+    }
+
+    public static ITerrainProvider get(final IAttachmentHolder in)
+    {
+        return in.getData(TYPE_SAVE.get());
+    }
+
+    public static final ResourceLocation LOCSAVEABLE = ResourceLocation.parse("thutcore:terrain");
+
+    public static Supplier<AttachmentType<ITerrainProvider>> TYPE_SAVE;
+
+    public static void registerAttachment(DeferredRegister<AttachmentType<?>> registry)
+    {
+        TYPE_SAVE = registry.register(LOCSAVEABLE.getPath(),
+                () -> AttachmentType.serializable(CapabilityTerrain::makeProvider).build());
     }
 }

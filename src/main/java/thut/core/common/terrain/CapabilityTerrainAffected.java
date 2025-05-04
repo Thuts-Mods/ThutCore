@@ -1,18 +1,12 @@
 package thut.core.common.terrain;
 
-import java.util.Collection;
-
-import net.minecraft.core.Direction;
 import net.minecraft.core.SectionPos;
 import net.minecraft.resources.ResourceLocation;
-import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.LivingEntity;
-import net.minecraftforge.common.MinecraftForge;
-import net.minecraftforge.common.capabilities.Capability;
-import net.minecraftforge.common.capabilities.ICapabilityProvider;
-import net.minecraftforge.common.util.LazyOptional;
-import net.minecraftforge.event.AttachCapabilitiesEvent;
-import net.minecraftforge.event.entity.living.LivingEvent.LivingTickEvent;
+import net.neoforged.neoforge.attachment.AttachmentType;
+import net.neoforged.neoforge.attachment.IAttachmentHolder;
+import net.neoforged.neoforge.event.tick.EntityTickEvent;
+import net.neoforged.neoforge.registries.DeferredRegister;
 import thut.api.ThutCaps;
 import thut.api.level.terrain.ITerrainAffected;
 import thut.api.level.terrain.TerrainEffectEvent;
@@ -21,11 +15,14 @@ import thut.api.level.terrain.TerrainSegment;
 import thut.api.level.terrain.TerrainSegment.ITerrainEffect;
 import thut.core.common.ThutCore;
 
+import java.util.Collection;
+import java.util.function.Function;
+import java.util.function.Supplier;
+
 public class CapabilityTerrainAffected
 {
-    public static class DefaultAffected implements ITerrainAffected, ICapabilityProvider
+    public static class DefaultAffected implements ITerrainAffected
     {
-        private final LazyOptional<ITerrainAffected> holder = LazyOptional.of(() -> this);
         private LivingEntity theMob;
         private TerrainSegment terrain;
         private Collection<ITerrainEffect> effects;
@@ -42,12 +39,6 @@ public class CapabilityTerrainAffected
             return this.theMob;
         }
 
-        @Override
-        public <T> LazyOptional<T> getCapability(final Capability<T> capability, final Direction facing)
-        {
-            return ThutCaps.TERRAIN_AFFECTED.orEmpty(capability, this.holder);
-        }
-
         public void onTerrainEntry(final TerrainSegment entered)
         {
             if (entered == this.terrain || this.theMob == null) return;
@@ -57,7 +48,8 @@ public class CapabilityTerrainAffected
             for (final ITerrainEffect effect : this.effects)
             {
                 final TerrainEffectEvent event = new TerrainEffectEvent(this.theMob, effect.getIdentifier(), true);
-                if (!MinecraftForge.EVENT_BUS.post(event)) effect.doEffect(this.theMob, true);
+                ThutCore.FORGE_BUS.post(event);
+                if (!event.isCanceled()) effect.doEffect(this.theMob, true);
             }
         }
 
@@ -67,50 +59,65 @@ public class CapabilityTerrainAffected
             if (this.theMob == null) return;
             if (this.terrain == null)
             {
-                this.terrain = TerrainManager.getInstance().getTerrainForEntity(this.theMob);
-                this.onTerrainEntry(this.terrain);
+                if (!theMob.level().isAreaLoaded(this.theMob.getOnPos(), 4)) return;
+                var terrain = TerrainManager.getInstance().getTerrainForEntity(this.theMob);
+                this.onTerrainEntry(terrain);
                 return;
             }
             var mobPos = SectionPos.of(this.theMob.blockPosition());
             boolean samePos = mobPos.x() == this.terrain.chunkX && mobPos.y() == this.terrain.chunkY
-                    && mobPos.y() == this.terrain.chunkY;
+                    && mobPos.z() == this.terrain.chunkZ;
             if (!samePos)
             {
-                this.terrain = TerrainManager.getInstance().getTerrainForEntity(this.theMob);
-                this.onTerrainEntry(this.terrain);
+                if (!theMob.level().isAreaLoaded(this.theMob.getOnPos(), 4)) return;
+                var terrain = TerrainManager.getInstance().getTerrainForEntity(this.theMob);
+                this.onTerrainEntry(terrain);
                 return;
             }
             if (this.effects == null) return;
             for (final ITerrainEffect effect : this.effects)
             {
                 final TerrainEffectEvent event = new TerrainEffectEvent(this.theMob, effect.getIdentifier(), false);
-                if (!MinecraftForge.EVENT_BUS.post(event)) effect.doEffect(this.theMob, false);
+                ThutCore.FORGE_BUS.post(event);
+                if (!event.isCanceled()) effect.doEffect(this.theMob, false);
             }
         }
 
     }
 
-    private static final ResourceLocation TERRAINEFFECTCAP = new ResourceLocation(ThutCore.MODID, "terrain_effects");
+    public static ITerrainAffected makeProvider(final IAttachmentHolder in)
+    {
+        if (!(in instanceof LivingEntity living)) return null;
+        var affected = new DefaultAffected();
+        affected.attach(living);
+        return affected;
+    }
+
+    public static ITerrainAffected get(final IAttachmentHolder in)
+    {
+        return in.getData(TYPE_SAVE.get());
+    }
+
+    public static final ResourceLocation LOCSAVEABLE = ResourceLocation.parse("thutcore:terrain_effects");
+
+    public static Supplier<AttachmentType<ITerrainAffected>> TYPE_SAVE;
+
+    public static void registerAttachment(DeferredRegister<AttachmentType<?>> registry)
+    {
+        Function<IAttachmentHolder, ITerrainAffected> func_a = CapabilityTerrainAffected::makeProvider;
+        var attach_a = AttachmentType.builder(func_a).build();
+        TYPE_SAVE = registry.register(LOCSAVEABLE.getPath(), () -> attach_a);
+    }
 
     public static void init()
     {
-        MinecraftForge.EVENT_BUS.addListener(CapabilityTerrainAffected::EntityUpdate);
-        MinecraftForge.EVENT_BUS.addGenericListener(Entity.class, CapabilityTerrainAffected::onEntityCapabilityAttach);
+        ThutCore.FORGE_BUS.addListener(CapabilityTerrainAffected::EntityUpdate);
     }
 
-    private static void EntityUpdate(final LivingTickEvent evt)
+    private static void EntityUpdate(final EntityTickEvent.Post evt)
     {
-        final ITerrainAffected effects = evt.getEntity().getCapability(ThutCaps.TERRAIN_AFFECTED, null).orElse(null);
+        if (!(evt.getEntity() instanceof LivingEntity)) return;
+        final ITerrainAffected effects = ThutCaps.getTerrainAffected(evt.getEntity());
         if (effects != null) effects.onTerrainTick();
-    }
-
-    private static void onEntityCapabilityAttach(final AttachCapabilitiesEvent<Entity> event)
-    {
-        if (!(event.getObject() instanceof LivingEntity living)
-                || event.getCapabilities().containsKey(CapabilityTerrainAffected.TERRAINEFFECTCAP))
-            return;
-        final DefaultAffected effects = new DefaultAffected();
-        effects.attach(living);
-        event.addCapability(CapabilityTerrainAffected.TERRAINEFFECTCAP, effects);
     }
 }

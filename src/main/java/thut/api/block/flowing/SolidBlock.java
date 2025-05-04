@@ -15,25 +15,25 @@ import net.minecraft.world.level.block.state.StateDefinition;
 import net.minecraft.world.level.block.state.StateDefinition.Builder;
 import net.minecraft.world.phys.shapes.Shapes;
 import net.minecraft.world.phys.shapes.VoxelShape;
-import net.minecraftforge.registries.DeferredRegister;
-import net.minecraftforge.registries.RegistryObject;
+import net.neoforged.neoforge.registries.DeferredBlock;
+import net.neoforged.neoforge.registries.DeferredRegister;
 
 public abstract class SolidBlock extends FlowingBlock
 {
-    public static RegistryObject<FlowingBlock>[] makeSolid(DeferredRegister<Block> BLOCKS, String modid, String layer,
+    public static DeferredBlock<FlowingBlock>[] makeSolid(DeferredRegister.Blocks BLOCKS, String modid, String layer,
             String block, BlockBehaviour.Properties layer_props, BlockBehaviour.Properties block_props)
     {
-        ResourceLocation layer_id = new ResourceLocation(modid, layer);
-        ResourceLocation block_id = new ResourceLocation(modid, block);
+        ResourceLocation layer_id = ResourceLocation.fromNamespaceAndPath(modid, layer);
+        ResourceLocation block_id = ResourceLocation.fromNamespaceAndPath(modid, block);
 
         @SuppressWarnings("unchecked")
-        RegistryObject<FlowingBlock>[] arr = (RegistryObject<FlowingBlock>[]) Array.newInstance(RegistryObject.class,
+        DeferredBlock<FlowingBlock>[] arr = (DeferredBlock<FlowingBlock>[]) Array.newInstance(DeferredBlock.class,
                 2);
 
-        RegistryObject<FlowingBlock> layer_reg = BLOCKS.register(layer,
+        DeferredBlock<FlowingBlock> layer_reg = BLOCKS.register(layer,
                 () -> new PartialSolid(layer_props).alternateBlock(() -> REGMAP.get(block_id).get()));
         REGMAP.put(layer_id, layer_reg);
-        RegistryObject<FlowingBlock> block_reg = BLOCKS.register(block,
+        DeferredBlock<FlowingBlock> block_reg = BLOCKS.register(block,
                 () -> new FullSolid(block_props).alternateBlock(() -> REGMAP.get(layer_id).get()));
         REGMAP.put(block_id, block_reg);
 

@@ -3,6 +3,7 @@ package thut.core.client.render.bbmodel;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 
 import thut.api.entity.IAnimated.MolangVars;
@@ -20,8 +21,21 @@ public class AnimationConversion
     {
         String jep = molang;
 
+        if (molang.contains("NaN"))
+        {
+            ThutCore.LOGGER.error("Warning, NaN in molang " + molang);
+            jep = jep.replace("NaN", "0");
+        }
+        // Ignore case
+        jep = jep.toLowerCase(Locale.ROOT);
+
         jep = jep.replaceAll("math.", "");// We do not need "math."
-        jep = jep.replaceAll("Math.", "");// We do not need "math."
+
+        // cleanup missing * symbols
+        jep = jep.replace(")clamp", ")*clamp");
+        jep = jep.replace(")sin", ")*sin");
+        jep = jep.replace(")cos", ")*cos");
+        jep = jep.replace(")tan", ")*tan");
 
         // We take radians for these, not degreees.
         jep = jep.replace("sin(", "sin_deg(");
@@ -43,7 +57,6 @@ public class AnimationConversion
             ThutCore.LOGGER.error("Error with molang to jep conversion, was not complete! " + molang + " " + jep);
             jep = "0";
         }
-
         return jep;
     }
 
@@ -72,6 +85,7 @@ public class AnimationConversion
         final float time;
         boolean has_scale = false;
         boolean forcedLimbs = false;
+        List<String> interpolations = new ArrayList<>();
         Object[] rotations =
         { null, null, null };
         Object[] positions =
@@ -84,6 +98,9 @@ public class AnimationConversion
         {
             this.time = (float) (time * 20);
             this.forcedLimbs = forcedLimbs;
+            interpolations.add("linear");
+            interpolations.add("linear");
+            interpolations.add("linear");
         }
 
         public void process(BBKeyFrame keyframe)
@@ -146,16 +163,19 @@ public class AnimationConversion
                 this.rotations[0] = x;
                 this.rotations[1] = y;
                 this.rotations[2] = z;
+                interpolations.set(0, keyframe.interpolation);
                 break;
             case "position":
                 this.positions[0] = x;
                 this.positions[1] = y;
                 this.positions[2] = z;
+                interpolations.set(1, keyframe.interpolation);
                 break;
             case "scale":
                 this.scales[0] = x;
                 this.scales[1] = z;
                 this.scales[2] = y;
+                interpolations.set(2, keyframe.interpolation);
                 has_scale = true;
                 break;
             }
@@ -210,7 +230,7 @@ public class AnimationConversion
             if (length <= 0) length = (float) max_length;
             length = (float) Math.min(max_length - start, length);
 
-            if (first_frame == next_frame) start = 0;
+            if (first_frame == next_frame && !this.interpolations.contains("step")) start = 0;
 
             XMLAnimationSegment segment = new XMLAnimationSegment(length, start);
 
@@ -241,33 +261,36 @@ public class AnimationConversion
                     segment.scaleOffset[0] = segment.scaleOffset[0];
                     segment.scaleOffset[1] = segment.scaleOffset[1];
                     segment.scaleOffset[2] = segment.scaleOffset[2];
-                    if (segment.scaleOffset[0] <= 0) segment.hidden = true;
                 }
             }
 
             if (next_frame != first_frame)
             {
-                all_not_func = this.setDiff(segment.posChange, this.positions, next_frame.positions,
-                        segment._posFunctions) & all_not_func;
-                all_not_func = this.setDiff(segment.rotChange, this.rotations, next_frame.rotations,
-                        segment._rotFunctions) & all_not_func;
-                all_not_func = this.setDiff(segment.scaleChange, this.scales, next_frame.scales,
-                        segment._scaleFunctions) & all_not_func;
 
-                var old = segment.posChange.clone();
-
-                segment.posChange[0] = +old[0] * 1 / 16f;
-                segment.posChange[1] = +old[2] * 1 / 16f;
-                segment.posChange[2] = -old[1] * 1 / 16f;
-
-                old = segment.rotChange.clone();
-
-                segment.rotChange[0] = +old[0];
-                segment.rotChange[1] = +old[1];
-                segment.rotChange[2] = -old[2];
-
-                if (has_scale)
+                if (!this.interpolations.get(0).contains("step"))
                 {
+                    all_not_func = this.setDiff(segment.rotChange, this.rotations, next_frame.rotations,
+                            segment._rotFunctions) & all_not_func;
+                    var old = segment.rotChange.clone();
+                    segment.rotChange[0] = +old[0];
+                    segment.rotChange[1] = +old[1];
+                    segment.rotChange[2] = -old[2];
+                }
+
+                if (!this.interpolations.get(1).contains("step"))
+                {
+                    all_not_func = this.setDiff(segment.posChange, this.positions, next_frame.positions,
+                            segment._posFunctions) & all_not_func;
+                    var old = segment.posChange.clone();
+                    segment.posChange[0] = +old[0] * 1 / 16f;
+                    segment.posChange[1] = +old[2] * 1 / 16f;
+                    segment.posChange[2] = -old[1] * 1 / 16f;
+                }
+
+                if (has_scale && !this.interpolations.get(2).contains("step"))
+                {
+                    all_not_func = this.setDiff(segment.scaleChange, this.scales, next_frame.scales,
+                            segment._scaleFunctions) & all_not_func;
                     segment.scaleChange[0] = segment.scaleChange[0];
                     segment.scaleChange[1] = segment.scaleChange[1];
                     segment.scaleChange[2] = -segment.scaleChange[2];
@@ -356,7 +379,7 @@ public class AnimationConversion
                                 last_frame = next_frame;
                             }
                             var xml = last_frame.toXML(first_frame, first_frame, animation.length);
-                            if (xml._needJEPInit) xml_parts.add(xml);
+                            if (xml._needJEPInit || last_frame.interpolations.contains("step")) xml_parts.add(xml);
                         }
                     }
                 }

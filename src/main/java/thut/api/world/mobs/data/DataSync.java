@@ -1,67 +1,55 @@
 package thut.api.world.mobs.data;
 
+import net.minecraft.core.HolderLookup;
+
 import java.util.List;
 
+/**
+ * Capability for synchronizing generic values between server and client.
+ *
+ */
 public interface DataSync
 {
-    /**
-     * Gets the value for the entry.
-     *
-     * @param key
-     * @return
-     */
-    <T> T get(int key);
+    void setHolderLookup(HolderLookup.Provider provider);
 
     /**
      * Gets all entries.
-     *
-     * @return
      */
     List<Data<?>> getAll();
 
     /**
-     * Gets all entries which need to by synced.
-     *
-     * @return
+     * Gets all entries which need to be synced.
      */
     List<Data<?>> getDirty();
 
     /**
      * This registers the given data type, the integer returned is the key for
      * this data.
-     *
-     * @param data
-     * @return
      */
-    <T> int register(Data<T> data, T value);
+    <T> Data<T> register(Data<T> data);
 
-    /**
-     * Sets the given entry to the value.
-     *
-     * @param key
-     * @param value
-     */
-    <T> void set(int key, T value);
+    void setRegisterTag(String tag);
 
     /**
      * Updates the given values.
-     *
-     * @param values
      */
     void update(List<Data<?>> values);
+
+    boolean needInit();
+
+    void clearNeedInit();
+
+    void init(List<Data<?>> values);
 
     /**
      * This returns the last tick it was synced, this is used to prevent
      * over-sending of the update packets
-     * 
-     * @return
+     *
      */
     long getTick();
 
     /**
      * Sets the last tick that this was synced.
-     * 
-     * @param tick
      */
     void setTick(long tick);
 
@@ -72,11 +60,18 @@ public interface DataSync
     {
         return 10;
     }
-    
+
     boolean syncNow();
 
+    void setSyncNow();
     /**
      * @return A random offset to apply with use with tickRate()
      */
     int tickOffset();
+
+    void clearMatching(String tag);
+
+    List<Data<?>> getTagged(String tag);
+
+    void mapFrom(DataSync other, String tag);
 }

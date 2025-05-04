@@ -1,0 +1,19 @@
+
+{
+  "required": true,
+  "package": "thut.mixin",
+  "compatibilityLevel": "JAVA_21",
+  "refmap": "thutcore.refmap.json",
+  "mixins": [
+    "accessors.WalkAniAccessor",
+    "entity.LevelEntityEventClient",
+    "entity.LevelEntityEventServer",
+    "terrain.ChunkAccessTerrain"
+  ],
+  "client": [
+  ],
+  "injectors": {
+    "defaultRequire": 1
+  },
+  "minVersion": "0.8"
+}

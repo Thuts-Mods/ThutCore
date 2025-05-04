@@ -4,38 +4,24 @@ import java.util.List;
 
 import com.google.common.collect.Lists;
 
-import net.minecraft.core.Direction;
 import net.minecraft.world.item.ItemStack;
-import net.minecraft.world.level.block.entity.BlockEntity;
-import net.minecraftforge.common.capabilities.Capability;
-import net.minecraftforge.common.capabilities.ICapabilityProvider;
-import net.minecraftforge.common.util.LazyOptional;
-import net.minecraftforge.items.IItemHandler;
-import net.minecraftforge.items.IItemHandlerModifiable;
-import net.minecraftforge.items.wrapper.EmptyHandler;
-import thut.api.ThutCaps;
+import net.neoforged.neoforge.items.IItemHandlerModifiable;
+import net.neoforged.neoforge.items.wrapper.EmptyItemHandler;
 
-public class BlockEntityInventory implements IItemHandlerModifiable, ICapabilityProvider
+public class BlockEntityInventory implements IItemHandlerModifiable
 {
-    private final LazyOptional<IItemHandler> holder = LazyOptional.of(() -> this);
 
-    IItemHandlerModifiable empty = new EmptyHandler();
+    IItemHandlerModifiable empty = new EmptyItemHandler();
 
     List<IItemHandlerModifiable> handlers;
-    List<Integer>                starts = Lists.newArrayList();
+    List<Integer> starts = Lists.newArrayList();
 
-    int                size = -1;
+    int size = -1;
     final IBlockEntity base;
 
     public BlockEntityInventory(final IBlockEntity base)
     {
         this.base = base;
-    }
-
-    @Override
-    public <T> LazyOptional<T> getCapability(final Capability<T> cap, final Direction side)
-    {
-        return ThutCaps.ITEM_HANDLER.orEmpty(cap, this.holder);
     }
 
     void init()
@@ -47,21 +33,19 @@ public class BlockEntityInventory implements IItemHandlerModifiable, ICapability
             final int sizeX = this.base.getTiles().length;
             final int sizeY = this.base.getTiles()[0].length;
             final int sizeZ = this.base.getTiles()[0][0].length;
-            for (int i = 0; i < sizeX; i++)
-                for (int k = 0; k < sizeY; k++)
-                    for (int j = 0; j < sizeZ; j++)
-                    {
-                        final BlockEntity tile = this.base.getTiles()[i][j][k];
-                        LazyOptional<IItemHandler> opt;
-                        if (tile != null && (opt = tile.getCapability(ThutCaps.ITEM_HANDLER))
-                                .isPresent() && opt.orElse(null) instanceof IItemHandlerModifiable)
-                        {
-                            final IItemHandlerModifiable handler = (IItemHandlerModifiable) opt.orElse(null);
-                            this.handlers.add(handler);
-                            this.starts.add(this.size);
-                            this.size += handler.getSlots();
-                        }
-                    }
+            for (int i = 0; i < sizeX; i++) for (int k = 0; k < sizeY; k++) for (int j = 0; j < sizeZ; j++)
+            {
+                // TODO inventories for block entities.
+//                final BlockEntity tile = this.base.getTiles()[i][j][k];
+//                IItemHandler opt;
+//                if (tile != null && (opt = ThutCaps.getInventory(tile)) != null
+//                        && opt instanceof IItemHandlerModifiable handler)
+//                {
+//                    this.handlers.add(handler);
+//                    this.starts.add(this.size);
+//                    this.size += handler.getSlots();
+//                }
+            }
         }
     }
 
@@ -74,8 +58,7 @@ public class BlockEntityInventory implements IItemHandlerModifiable, ICapability
 
     protected int getIndex(final int slot)
     {
-        for (int i = 0; i < this.starts.size() - 1; i++)
-            if (this.starts.get(i + 1) > slot) return i;
+        for (int i = 0; i < this.starts.size() - 1; i++) if (this.starts.get(i + 1) > slot) return i;
         return 0;
     }
 

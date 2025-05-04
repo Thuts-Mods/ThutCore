@@ -15,7 +15,7 @@ import thut.core.init.RegistryObjects;
 
 public class NpcContainer extends BaseContainer
 {
-    private ResourceLocation tex = new ResourceLocation("thutcore", "textures/gui/generic_4x2.png");
+    private ResourceLocation tex = ResourceLocation.fromNamespaceAndPath("thutcore", "textures/gui/generic_4x2.png");
 
     private final Container wrapped;
 

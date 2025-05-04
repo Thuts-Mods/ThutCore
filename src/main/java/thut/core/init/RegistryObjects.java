@@ -2,23 +2,24 @@ package thut.core.init;
 
 import net.minecraft.world.flag.FeatureFlagSet;
 import net.minecraft.world.inventory.MenuType;
-import net.minecraftforge.network.IContainerFactory;
-import net.minecraftforge.registries.RegistryObject;
+import net.neoforged.neoforge.network.IContainerFactory;
 import thut.api.inventory.npc.NpcContainer;
 import thut.api.particle.ParticleNoGravity;
 import thut.api.particle.ParticleOrientable;
 import thut.api.particle.ThutParticles;
 import thut.core.common.ThutCore;
 
+import java.util.function.Supplier;
+
 public class RegistryObjects
 {
-    public static final RegistryObject<MenuType<NpcContainer>> NPC_MENU;
+    public static final Supplier<MenuType<NpcContainer>> NPC_MENU;
 
-    public static final RegistryObject<ParticleNoGravity> STRING;
-    public static final RegistryObject<ParticleNoGravity> AURORA;
-    public static final RegistryObject<ParticleNoGravity> MISC;
-    public static final RegistryObject<ParticleNoGravity> POWDER;
-    public static final RegistryObject<ParticleOrientable> LEAF;
+    public static final Supplier<ParticleNoGravity> STRING;
+    public static final Supplier<ParticleNoGravity> AURORA;
+    public static final Supplier<ParticleNoGravity> MISC;
+    public static final Supplier<ParticleNoGravity> POWDER;
+    public static final Supplier<ParticleOrientable> LEAF;
 
     static
     {
@@ -30,7 +31,6 @@ public class RegistryObjects
         MISC = ThutCore.RegistryEvents.PARTICLES.register("misc", () -> ThutParticles.MISC);
         STRING = ThutCore.RegistryEvents.PARTICLES.register("string", () -> ThutParticles.STRING);
         POWDER = ThutCore.RegistryEvents.PARTICLES.register("powder", () -> ThutParticles.POWDER);
-
     }
 
     public static void init()

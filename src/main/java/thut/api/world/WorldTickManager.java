@@ -1,23 +1,48 @@
 package thut.api.world;
 
+import com.google.common.collect.Lists;
+import com.google.common.collect.Maps;
+import net.minecraft.resources.ResourceKey;
+import net.minecraft.server.level.ServerLevel;
+import net.minecraft.world.level.Level;
+import net.neoforged.bus.api.SubscribeEvent;
+import net.neoforged.fml.common.EventBusSubscriber;
+import net.neoforged.neoforge.event.level.LevelEvent;
+import net.neoforged.neoforge.event.tick.LevelTickEvent;
+import thut.api.Tracker;
+import thut.core.common.ThutCore;
+
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.function.Predicate;
 import java.util.function.Supplier;
 
-import com.google.common.collect.Lists;
-import com.google.common.collect.Maps;
-
-import net.minecraft.resources.ResourceKey;
-import net.minecraft.server.level.ServerLevel;
-import net.minecraft.world.level.Level;
-import net.minecraftforge.event.TickEvent.LevelTickEvent;
-import net.minecraftforge.event.TickEvent.Phase;
-import net.minecraftforge.event.level.LevelEvent;
-import thut.core.common.ThutCore;
-
+@EventBusSubscriber
 public class WorldTickManager
 {
+    public static class DelayedTask implements Runnable
+    {
+        private final long tick;
+        private final Runnable runnable;
+
+        public DelayedTask(long runTick, Runnable runnable)
+        {
+            this.tick = runTick;
+            this.runnable = runnable;
+        }
+
+        public long getTick()
+        {
+            return this.tick;
+        }
+
+        public void run()
+        {
+            this.runnable.run();
+        }
+    }
+
     private static class WorldData
     {
         private final List<IWorldTickListener> data = Lists.newArrayList();
@@ -26,6 +51,8 @@ public class WorldTickManager
 
         private final List<IWorldTickListener> pendingRemove = Lists.newArrayList();
         private final List<IWorldTickListener> pendingAdd = Lists.newArrayList();
+        private final List<DelayedTask> pendingDelayed = new ArrayList<>();
+        private final List<DelayedTask> delayed = new ArrayList<>();
 
         private boolean ticking = false;
 
@@ -54,6 +81,25 @@ public class WorldTickManager
             for (final IWorldTickListener data : this.pendingAdd) this.addData(data);
             this.pendingRemove.clear();
             this.pendingAdd.clear();
+
+            synchronized (pendingDelayed)
+            {
+                this.delayed.addAll(pendingDelayed);
+                pendingDelayed.clear();
+            }
+
+            delayed.removeIf(task -> {
+                if (task.getTick() > Tracker.instance().getTick()) return false;
+                try
+                {
+                    task.run();
+                }
+                catch (Exception e)
+                {
+                    ThutCore.LOGGER.error("Error running a delayed task!", e);
+                }
+                return true;
+            });
         }
 
         public void addData(final IWorldTickListener data)
@@ -72,6 +118,14 @@ public class WorldTickManager
                 data.onDetach(this.world);
             }
             else this.pendingRemove.add(data);
+        }
+
+        public void addDelayedTask(DelayedTask task)
+        {
+            synchronized (pendingDelayed)
+            {
+                this.pendingDelayed.add(task);
+            }
         }
 
         public void detach()
@@ -116,6 +170,17 @@ public class WorldTickManager
         holder.addData(data);
     }
 
+    public static void scheduleTask(final ResourceKey<Level> key, final DelayedTask task)
+    {
+        final WorldData holder = WorldTickManager.dataMap.get(key);
+        if (holder == null)
+        {
+            ThutCore.LOGGER.error("Adding Data before load???");
+            return;
+        }
+        holder.addDelayedTask(task);
+    }
+
     public static void removeWorldData(final ResourceKey<Level> key, final IWorldTickListener data)
     {
         final WorldData holder = WorldTickManager.dataMap.get(key);
@@ -127,6 +192,7 @@ public class WorldTickManager
         holder.removeData(data);
     }
 
+    @SubscribeEvent
     public static void onWorldLoad(final LevelEvent.Load event)
     {
         if (event.getLevel().isClientSide()) return;
@@ -141,6 +207,7 @@ public class WorldTickManager
         WorldTickManager.pathHelpers.put(key, Lists.newArrayList());
     }
 
+    @SubscribeEvent
     public static void onWorldUnload(final LevelEvent.Unload event)
     {
         if (event.getLevel().isClientSide()) return;
@@ -150,30 +217,36 @@ public class WorldTickManager
         WorldTickManager.pathHelpers.remove(key);
     }
 
-    public static void onWorldTick(final LevelTickEvent event)
+    @SubscribeEvent
+    public static void onWorldTickPost(final LevelTickEvent.Post event)
     {
-        if (event.level instanceof ServerLevel)
+        if (event.getLevel() instanceof ServerLevel)
         {
-            
-            // Uncomment to produce server lag for testing.
-//            if (event.level.getRandom().nextDouble() > 0.9)
-//            {
-//                long start = System.nanoTime();
-//                int wait = event.level.getRandom().nextInt(1000000, 100000000);
-//                while (System.nanoTime() < start + wait)
-//                {}
-//                System.out.println("FORCED LAGGED: " + (wait / 1e9d));
-//            }
-            
-            final ResourceKey<Level> key = event.level.dimension();
+            final ResourceKey<Level> key = event.getLevel().dimension();
             final WorldData data = WorldTickManager.dataMap.get(key);
             if (data == null)
             {
                 ThutCore.LOGGER.error("Ticking world before load???");
                 return;
             }
-            if (event.phase == Phase.END) data.onWorldTickEnd();
-            else data.onWorldTickStart();
+            data.onWorldTickEnd();
+
+        }
+    }
+
+    @SubscribeEvent
+    public static void onWorldTickPre(final LevelTickEvent.Pre event)
+    {
+        if (event.getLevel() instanceof ServerLevel)
+        {
+            final ResourceKey<Level> key = event.getLevel().dimension();
+            final WorldData data = WorldTickManager.dataMap.get(key);
+            if (data == null)
+            {
+                ThutCore.LOGGER.error("Ticking world before load???");
+                return;
+            }
+            data.onWorldTickStart();
         }
     }
 }

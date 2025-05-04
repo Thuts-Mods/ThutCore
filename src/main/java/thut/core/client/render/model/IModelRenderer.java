@@ -12,9 +12,9 @@ import thut.api.ModelHolder;
 import thut.api.entity.IAnimated.HeadInfo;
 import thut.api.entity.IAnimated.IAnimationHolder;
 import thut.api.entity.animation.Animation;
+import thut.api.entity.animation.IAnimationChanger;
 import thut.api.maths.Vector3;
 import thut.api.maths.Vector4;
-import thut.core.client.render.animation.IAnimationChanger;
 import thut.core.client.render.texturing.IPartTexturer;
 
 public interface IModelRenderer<T extends Entity>
@@ -60,8 +60,6 @@ public interface IModelRenderer<T extends Entity>
         return IModelRenderer.DEFAULTPHASE;
     }
 
-    IAnimationChanger getAnimationChanger();
-
     Map<String, List<Animation>> getAnimations();
 
     default Vector3 getRotationOffset()
@@ -74,8 +72,6 @@ public interface IModelRenderer<T extends Entity>
         return IModelRenderer.DEFAULTSCALE;
     }
 
-    IPartTexturer getTexturer();
-
     boolean hasAnimation(String phase, Entity entity);
 
     void scaleEntity(PoseStack mat, Entity entity, IModel model, float partialTick);
@@ -87,6 +83,7 @@ public interface IModelRenderer<T extends Entity>
         if (holder != null)
         {
             final List<Animation> anim = this.getAnimations(entity, phase);
+            holder.setAnimationChanger(getAnimationChanger());
             if (getAnimations() != null) holder.initAnimations(getAnimations(), IModelRenderer.DEFAULTPHASE);
             if (anim != null && !anim.isEmpty() || (anim != null && phase.equals("none")))
                 holder.setPendingAnimations(anim, phase);
@@ -99,9 +96,11 @@ public interface IModelRenderer<T extends Entity>
         return null;
     }
 
-    void setAnimationHolder(IAnimationHolder holder);
+    IAnimationChanger getAnimationChanger();
 
     IAnimationHolder getAnimationHolder();
+
+    IPartTexturer getTexturer();
 
     /**
      * This one is only used to store the axis/limits/offsets. For actual
@@ -114,11 +113,13 @@ public interface IModelRenderer<T extends Entity>
 
     void setAnimationChanger(IAnimationChanger changer);
 
+    void setAnimationHolder(IAnimationHolder holder);
+
+    void setTexturer(IPartTexturer texturer);
+
     void setRotationOffset(Vector3 offset);
 
     void setScale(Vector3 scale);
-
-    void setTexturer(IPartTexturer texturer);
 
     void updateModel(Map<String, List<Vector5>> phaseList, ModelHolder model);
 }

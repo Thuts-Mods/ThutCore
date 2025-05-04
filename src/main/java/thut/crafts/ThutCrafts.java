@@ -1,22 +1,20 @@
 package thut.crafts;
 
-import net.minecraft.resources.ResourceLocation;
+import java.util.function.Supplier;
+
+import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.item.CreativeModeTabs;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.entity.BlockEntityType;
-import net.minecraftforge.common.MinecraftForge;
-import net.minecraftforge.event.BuildCreativeModeTabContentsEvent;
-import net.minecraftforge.eventbus.api.IEventBus;
-import net.minecraftforge.eventbus.api.SubscribeEvent;
-import net.minecraftforge.fml.common.Mod;
-import net.minecraftforge.fml.config.ModConfig.Type;
-import net.minecraftforge.fml.event.lifecycle.FMLCommonSetupEvent;
-import net.minecraftforge.fml.javafmlmod.FMLJavaModLoadingContext;
-import net.minecraftforge.registries.DeferredRegister;
-import net.minecraftforge.registries.ForgeRegistries;
-import net.minecraftforge.registries.RegistryObject;
+import net.neoforged.bus.api.IEventBus;
+import net.neoforged.fml.ModContainer;
+import net.neoforged.fml.common.Mod;
+import net.neoforged.fml.config.ModConfig.Type;
+import net.neoforged.fml.event.lifecycle.FMLCommonSetupEvent;
+import net.neoforged.neoforge.event.BuildCreativeModeTabContentsEvent;
+import net.neoforged.neoforge.registries.DeferredRegister;
 import thut.api.entity.blockentity.BlockEntityBase;
 import thut.api.entity.blockentity.block.TempBlock;
 import thut.api.entity.blockentity.block.TempTile;
@@ -50,13 +48,12 @@ public class ThutCrafts
         {}
     }
 
-    public final static PacketHandler packets = new PacketHandler(new ResourceLocation(Reference.MODID, "comms"),
-            Reference.NETVERSION);
+    public final static PacketHandler packets = new PacketHandler(Reference.NETVERSION);
 
-    public static final RegistryObject<EntityType<EntityCraft>> CRAFTTYPE;
-    public static final RegistryObject<Item> CRAFTMAKER;
-    public static final RegistryObject<TempBlock> CRAFTBLOCK;
-    public static final RegistryObject<BlockEntityType<TempTile>> CRAFTTE;
+    public static final Supplier<EntityType<EntityCraft>> CRAFTTYPE;
+    public static final Supplier<Item> CRAFTMAKER;
+    public static final Supplier<TempBlock> CRAFTBLOCK;
+    public static final Supplier<BlockEntityType<TempTile>> CRAFTTE;
 
     public static CraftsConfig conf = new CraftsConfig();
 
@@ -67,10 +64,10 @@ public class ThutCrafts
 
     static
     {
-        BLOCKS = DeferredRegister.create(ForgeRegistries.BLOCKS, Reference.MODID);
-        ITEMS = DeferredRegister.create(ForgeRegistries.ITEMS, Reference.MODID);
-        TILES = DeferredRegister.create(ForgeRegistries.BLOCK_ENTITY_TYPES, Reference.MODID);
-        ENTITIES = DeferredRegister.create(ForgeRegistries.ENTITY_TYPES, Reference.MODID);
+        BLOCKS = DeferredRegister.create(BuiltInRegistries.BLOCK, Reference.MODID);
+        ITEMS = DeferredRegister.create(BuiltInRegistries.ITEM, Reference.MODID);
+        TILES = DeferredRegister.create(BuiltInRegistries.BLOCK_ENTITY_TYPE, Reference.MODID);
+        ENTITIES = DeferredRegister.create(BuiltInRegistries.ENTITY_TYPE, Reference.MODID);
 
         CRAFTTYPE = ENTITIES.register("craft", () -> new BlockEntityBase.BlockEntityType<>(EntityCraft::new));
         CRAFTMAKER = ITEMS.register("craftmaker", () -> new Item(new Item.Properties()));
@@ -79,50 +76,39 @@ public class ThutCrafts
                 () -> BlockEntityType.Builder.of(TempTile::new, ThutCrafts.CRAFTBLOCK.get()).build(null));
     }
 
-    public ThutCrafts()
+    public ThutCrafts(IEventBus modEventBus, ModContainer modContainer)
     {
-        final IEventBus bus = FMLJavaModLoadingContext.get().getModEventBus();
         // Register the setup method for modloading
-        bus.addListener(this::setup);
-        bus.addListener(this::addCreative);
+        modEventBus.addListener(this::setup);
+        modEventBus.addListener(this::addCreative);
 
-        ThutCrafts.ITEMS.register(bus);
-        ThutCrafts.BLOCKS.register(bus);
-        ThutCrafts.TILES.register(bus);
-        ThutCrafts.ENTITIES.register(bus);
+        ThutCrafts.ITEMS.register(modEventBus);
+        ThutCrafts.BLOCKS.register(modEventBus);
+        ThutCrafts.TILES.register(modEventBus);
+        ThutCrafts.ENTITIES.register(modEventBus);
 
         // Register Config stuff
-        Config.setupConfigs(ThutCrafts.conf, ThutCore.MODID, Reference.MODID);
+        Config.setupConfigs(modContainer, ThutCrafts.conf, ThutCore.MODID, Reference.MODID);
     }
 
     private void setup(final FMLCommonSetupEvent event)
     {
         // Register the packets
-        ThutCrafts.packets.registerMessage(PacketCraftControl.class, PacketCraftControl::new);
+        ThutCrafts.packets.registerToServerMessage(PacketCraftControl.class);
 
-        // SEtup proxy
-        MinecraftForge.EVENT_BUS.register(ThutCrafts.class);
-
+        // Add stick applier
         CommonInit.HANDLERS.add(new CraftStickApplier());
     }
-    
 
-
-    @SubscribeEvent
     public void addCreative(BuildCreativeModeTabContentsEvent event) {
+
         if (event.getTabKey() == CreativeModeTabs.OP_BLOCKS)
         {
-            if (event.hasPermissions())
-            {
-                event.accept(ThutCrafts.CRAFTMAKER.get());
-            }
+            ThutCreativeTabs.addFront(event, ThutCrafts.CRAFTMAKER.get());
         }
-        if (event.getTabKey().equals(ThutCreativeTabs.UTILITIES_TAB.getKey()))
+        if (event.getTab().equals(ThutCreativeTabs.UTILITIES_TAB.get()))
         {
-            if (event.hasPermissions())
-            {
-                event.accept(ThutCrafts.CRAFTMAKER.get());
-            }
+            event.accept(ThutCrafts.CRAFTMAKER.get());
         }
     }
 }

@@ -250,7 +250,7 @@ public class BlockEntityUpdater
             if (dy1 == 0 && !(dz1 == 0 && dx1 == 0))
             {
                 dy = inter.maxY - toUse.minY;
-                if (dy >= 0 && dy < entity.getStepHeight())
+                if (dy >= 0 && dy < entity.maxUpStep())
                 {
                     boolean valid = true;
                     // check if none of the other boxes disagree with the step
@@ -351,7 +351,7 @@ public class BlockEntityUpdater
         final double uMax = Math.max(dims.getX(), Math.max(dims.getY(), dims.getZ()));
         this.theEntity.level().increaseMaxEntityRadius(uMax);
         EntityDimensions size = this.theEntity.getDimensions(this.theEntity.getPose());
-        if (size.width != dims.getX() + 1)
+        if (size.width() != dims.getX() + 1)
         {
             size = EntityDimensions.fixed(1 + dims.getX(), this.blockEntity.getMax().getY());
             this.blockEntity.setSize(size);

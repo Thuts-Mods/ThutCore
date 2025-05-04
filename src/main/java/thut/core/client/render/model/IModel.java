@@ -5,6 +5,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
+import javax.annotation.Nullable;
+
 import com.google.common.collect.ImmutableSet;
 import com.mojang.blaze3d.vertex.PoseStack;
 
@@ -35,19 +37,16 @@ public interface IModel
         return IModel.emptyAnims;
     }
 
-    default void initBuiltInAnimations(IModelRenderer<?> renderer, List<Animation> tblAnims)
+    default void initBuiltInAnimations(@Nullable IModelRenderer<?> renderer, List<Animation> tblAnims)
     {}
 
     Set<String> getHeadParts();
 
     Map<String, IExtendedModelPart> getParts();
 
-    List<String> getRenderOrder();
+    List<IExtendedModelPart> getRenderOrder();
 
-    default void setAnimationHolder(final IAnimationHolder holder)
-    {
-        this.getParts().forEach((s, p) -> p.setAnimationHolder(holder));
-    }
+    void setAnimationHolder(final IAnimationHolder holder);
 
     /**
      * Adjusts for differences in global coordinate systems.
@@ -90,6 +89,8 @@ public interface IModel
     {
         mat.name = ThutCore.trim(mat.name);
         final Material material = new Material(mat.name);
+        material.expectedTexH = mat.height;
+        material.expectedTexW = mat.width;
         material.diffuseColor = new Vec3f(1, 1, 1);
         material.emissiveColor = new Vec3f(mat.light, mat.light, mat.light);
         material.emissiveMagnitude = Math.min(1, (float) (material.emissiveColor.length() / Math.sqrt(3)) / 0.8f);
@@ -104,13 +105,16 @@ public interface IModel
             try
             {
                 material.texture = mat.tex;
-                material.tex = new ResourceLocation(mat.tex);
+                material.tex = ResourceLocation.parse(mat.tex);
             }
             catch (Exception e)
             {
                 ThutCore.LOGGER.error(e);
             }
         }
+        // Here we loop over the parts values instead of render order, as this
+        // is called before the render order is ready to setup. This is also not
+        // called during rendering itself, so is fine to be a slower loop.
         for (final IExtendedModelPart part : this.getParts().values()) part.updateMaterial(mat, material);
     }
 }

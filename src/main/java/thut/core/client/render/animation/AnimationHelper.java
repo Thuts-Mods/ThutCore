@@ -38,11 +38,12 @@ public class AnimationHelper
         boolean animate = false;
         if (holder != null)
         {
-            if (!entity.canUpdate())
-            {
-                partialTick = 0;
-                limbSwing = 0;
-            }
+        	// TODO custom canUpdate, this was from forge.
+//            if (!entity.canUpdate())
+//            {
+//                partialTick = 0;
+//                limbSwing = 0;
+//            }
             for (final Animation animation : list)
             {
                 holder.preRunAnim(animation);
@@ -56,7 +57,7 @@ public class AnimationHelper
 
     public static IAnimationHolder getHolder(final Entity mob)
     {
-        final IAnimationHolder cap = mob.getCapability(ThutCaps.ANIMCAP).orElse(null);
+        final IAnimationHolder cap = ThutCaps.getAnimationHolder(mob);
         if (cap != null) return cap;
         if (AnimationHelper.holderMap.containsKey(mob.getUUID())) return AnimationHelper.holderMap.get(mob.getUUID());
         else

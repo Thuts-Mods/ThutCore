@@ -1,10 +1,6 @@
 package thut.api.level.structures;
 
-import java.util.List;
-import java.util.Map.Entry;
-
 import com.google.common.collect.Lists;
-
 import net.minecraft.core.BlockPos;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerLevel;
@@ -15,6 +11,8 @@ import net.minecraft.world.level.levelgen.structure.Structure;
 import net.minecraft.world.level.levelgen.structure.StructurePiece;
 import net.minecraft.world.level.levelgen.structure.StructureStart;
 import thut.lib.RegHelper;
+
+import java.util.List;
 
 public class NamedVolumes
 {
@@ -79,8 +77,8 @@ public class NamedVolumes
 
     private static BoundingBox inflate(final BoundingBox other, final int amt)
     {
-        return new BoundingBox(other.minX(), other.minY(), other.minZ(), other.maxX(), other.maxY(), other.maxZ())
-                .inflatedBy(amt);
+        return new BoundingBox(other.minX(), other.minY(), other.minZ(), other.maxX(), other.maxY(),
+                other.maxZ()).inflatedBy(amt);
     }
 
     private static boolean insideBox(final BoundingBox b, BlockPos pos, boolean forTerrain)
@@ -100,11 +98,11 @@ public class NamedVolumes
         private int hash = -1;
         private String key;
 
-        public NamedStructureWrapper(ServerLevel level, String name, Entry<Structure, StructureStart> entry)
+        public NamedStructureWrapper(ServerLevel level, String name, Structure feature, StructureStart start)
         {
-            this.feature = entry.getKey();
+            this.feature = feature;
             this.name = name;
-            this.start = entry.getValue();
+            this.start = start;
             this.level = level;
         }
 
@@ -142,7 +140,7 @@ public class NamedVolumes
         {
             if (INamedStructure.super.is(name)) return true;
             var key = RegHelper.STRUCTURE_REGISTRY;
-            var tag = TagKey.create(key, new ResourceLocation(name));
+            var tag = TagKey.create(key, ResourceLocation.parse(name));
             var registry = level.registryAccess().registryOrThrow(key);
             var opt_holder = registry.getHolder(registry.getId(this.feature));
             return opt_holder.get().is(tag);

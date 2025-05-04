@@ -1,30 +1,19 @@
 package thut.core.client.render.model.parts;
 
-import java.util.Collection;
-import java.util.Collections;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
-import java.util.function.Predicate;
-
-import javax.annotation.Nullable;
-
-import org.joml.Quaternionf;
-
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
 import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.blaze3d.vertex.VertexConsumer;
-
 import it.unimi.dsi.fastutil.objects.Object2ObjectOpenHashMap;
 import net.minecraft.client.renderer.MultiBufferSource;
 import net.minecraft.resources.ResourceLocation;
+import org.joml.Quaternionf;
 import thut.api.entity.IAnimated.IAnimationHolder;
+import thut.api.entity.animation.IAnimationChanger;
 import thut.api.maths.Vector3;
 import thut.api.maths.Vector4;
 import thut.api.util.JsonUtil;
 import thut.core.client.render.animation.AnimationXML.Mat;
-import thut.core.client.render.animation.IAnimationChanger;
 import thut.core.client.render.model.IExtendedModelPart;
 import thut.core.client.render.model.Vertex;
 import thut.core.client.render.texturing.IPartTexturer;
@@ -32,20 +21,30 @@ import thut.core.client.render.texturing.IRetexturableModel;
 import thut.core.common.ThutCore;
 import thut.lib.AxisAngles;
 
+import javax.annotation.Nullable;
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.Collections;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.function.Predicate;
+
 public abstract class Part implements IExtendedModelPart, IRetexturableModel
 {
     private final Map<String, IExtendedModelPart> parts = new Object2ObjectOpenHashMap<>();
 
-    private final List<String> order = Lists.newArrayList();
-    private final List<Mesh> shapes = Lists.newArrayList();
+    private final List<IPartRenderAdder> renderAdders = new ArrayList<>();
+    private final List<IExtendedModelPart> order = new ArrayList<>();
+    private final List<Mesh> shapes = new ArrayList<>();
 
     private final String name;
 
     private IExtendedModelPart parent = null;
 
-    IPartTexturer texturer;
-    IAnimationChanger changer;
-    IAnimationHolder currentHolder = null;
+    IRetexturableModel.Holder<IAnimationChanger> animChangeHolder = new IRetexturableModel.Holder<>();
+    IRetexturableModel.Holder<IAnimationHolder> animHolderHolder = new IRetexturableModel.Holder<>();
+    IRetexturableModel.Holder<IPartTexturer> texChangeHolder = new IRetexturableModel.Holder<>();
 
     public Vector4 preRot = new Vector4();
     public Vector4 postRot = new Vector4();
@@ -63,9 +62,9 @@ public abstract class Part implements IExtendedModelPart, IRetexturableModel
     private float ds = 1;
     public float ds0 = 1;
     public float ds1 = 1;
+    private float ds2 = 1;
 
-    public float[] colour_scales =
-    { 1f, 1f, 1f, 1f };
+    public float[] colour_scales = { 1f, 1f, 1f, 1f };
 
     Vector3 min = new Vector3();
     Vector3 max = new Vector3();
@@ -96,17 +95,18 @@ public abstract class Part implements IExtendedModelPart, IRetexturableModel
     private void initBounds()
     {
         if (!(this.max.isEmpty() && this.min.isEmpty())) return;
-        for (final Mesh shape : this.shapes) for (final Vertex v : shape.vertices)
-        {
+        for (final Mesh shape : this.shapes)
+            for (final Vertex v : shape.vertices)
+            {
 
-            this.min.x = Math.min(this.min.x, v.x);
-            this.min.y = Math.min(this.min.y, v.y);
-            this.min.z = Math.min(this.min.z, v.z);
+                this.min.x = Math.min(this.min.x, v.x);
+                this.min.y = Math.min(this.min.y, v.y);
+                this.min.z = Math.min(this.min.z, v.z);
 
-            this.max.x = Math.max(this.max.x, v.x);
-            this.max.y = Math.max(this.max.y, v.y);
-            this.max.z = Math.max(this.max.z, v.z);
-        }
+                this.max.x = Math.max(this.max.x, v.x);
+                this.max.y = Math.max(this.max.y, v.y);
+                this.max.z = Math.max(this.max.z, v.z);
+            }
     }
 
     @Override
@@ -136,7 +136,10 @@ public abstract class Part implements IExtendedModelPart, IRetexturableModel
         if (shape.material == null) return;
         if (this.matcache.add(shape.material))
         {
-            this.materials.add(shape.material);
+            synchronized (materials)
+            {
+                this.materials.add(shape.material);
+            }
             this.namedMaterials.put(shape.material.name, shape.material);
         }
     }
@@ -250,12 +253,16 @@ public abstract class Part implements IExtendedModelPart, IRetexturableModel
     public void render(final PoseStack mat, final VertexConsumer buffer)
     {
         if (this.isDisabled()) return;
+
+        for (var adder : this.renderAdders) adder.onRender(mat, this);
+
         this.preRender(mat);
         for (final Mesh s : this.shapes)
         {
-            s.scale = ds / ds1;
+            s.renderScale = ds2;
+            s.cullScale = ds / ds2;
             // Render each Shape
-            s.renderShape(mat, buffer, this.texturer);
+            s.renderShape(mat, buffer, this.texChangeHolder.get());
         }
         this.postRender(mat);
     }
@@ -270,17 +277,10 @@ public abstract class Part implements IExtendedModelPart, IRetexturableModel
     public void renderAllExcept(final PoseStack mat, final VertexConsumer buffer,
             final Collection<String> excludedGroupNames)
     {
-        boolean skip = this.hidden;
+        boolean skip = this.isHidden();
         if (skip || excludedGroupNames.contains(this.name)) return;
-        if (!skip)
-        {
-            for (final String s : this.order)
-            {
-                final IExtendedModelPart o = this.parts.get(s);
-                o.renderAllExcept(mat, buffer, excludedGroupNames);
-            }
-            this.render(mat, buffer);
-        }
+        for (var part : this.order) part.renderAllExcept(mat, buffer, excludedGroupNames);
+        this.render(mat, buffer);
     }
 
     @Override
@@ -291,11 +291,10 @@ public abstract class Part implements IExtendedModelPart, IRetexturableModel
             this.render(mat, buffer);
             return;
         }
-        for (final String s : this.order)
+        for (var part : this.order)
         {
-            final IExtendedModelPart o = this.parts.get(s);
-            if (o instanceof Part p) p.ds = p.ds0 * this.ds;
-            o.renderOnly(mat, buffer, groupNames);
+            if (part instanceof Part p) p.ds = p.ds0 * this.ds;
+            part.renderOnly(mat, buffer, groupNames);
         }
     }
 
@@ -307,10 +306,9 @@ public abstract class Part implements IExtendedModelPart, IRetexturableModel
             this.render(mat, buffer);
             return;
         }
-        for (final String s : this.order)
+        for (var part : this.order)
         {
-            final IExtendedModelPart o = this.parts.get(s);
-            if (s.equalsIgnoreCase(partName)) o.render(mat, buffer);
+            if (part.getName().equalsIgnoreCase(partName)) part.render(mat, buffer);
         }
     }
 
@@ -322,26 +320,14 @@ public abstract class Part implements IExtendedModelPart, IRetexturableModel
         // Post rot is head direction
         this.postRot.set(0, 0, 0, 1);
         this.preTrans.set(offset);
+        this.preScale.set(1, 1, 1);
         this.postTrans.clear();
         this.colour_scales[0] = 1;
         this.colour_scales[1] = 1;
         this.colour_scales[2] = 1;
         this.colour_scales[3] = 1;
         this.hidden = false;
-    }
-
-    @Override
-    public void setAnimationChanger(final IAnimationChanger changer)
-    {
-        this.setAnimationChangerRaw(changer);
-        for (final IExtendedModelPart part : this.parts.values())
-            if (part instanceof IRetexturableModel tex) tex.setAnimationChanger(changer);
-    }
-
-    @Override
-    public void setAnimationChangerRaw(IAnimationChanger changer)
-    {
-        this.changer = changer;
+        ds0 = ds = 1;
     }
 
     @Override
@@ -460,68 +446,46 @@ public abstract class Part implements IExtendedModelPart, IRetexturableModel
     }
 
     @Override
-    public void setTexturer(final IPartTexturer texturer)
-    {
-        this.setTexturerRaw(texturer);
-        for (final IExtendedModelPart part : this.parts.values())
-            if (part instanceof IRetexturableModel tex) tex.setTexturer(texturer);
-    }
-
-    @Override
-    public void setTexturerRaw(IPartTexturer texturer)
-    {
-        this.texturer = texturer;
-    }
-
-    @Override
     public void updateMaterial(final Mat mat, final Material material)
     {
-        String[] parts = mat.name.split(":");
         if (mat.meshs == null) mat.meshs = "";
+        String[] parts = mat.meshs.split(":");
         if (mat.meshs.equals(this.getName()))
         {
             for (final Mesh mesh : this.shapes) mesh.setMaterial(material);
         }
-        else for (final String s : parts) for (final Mesh mesh : this.shapes)
-        {
-            if (mesh.name == null) mesh.name = this.getName();
-            if (mesh.name.equals(ThutCore.trim(s)) || mesh.name.equals(mat.name))
+        else for (final String s : parts)
+            for (final Mesh mesh : this.shapes)
             {
-                mesh.setMaterial(material);
+                if (mesh.name == null) mesh.name = this.getName();
+                if (mesh.name.equals(ThutCore.trim(s)) || mesh.name.equals(mat.name) || this.getName().equals(s))
+                {
+                    mesh.setMaterial(material);
+                }
             }
-        }
         if (material == null)
         {
             ThutCore.LOGGER.error("Error loading a material, trying to set it to null: {}", JsonUtil.gson.toJson(mat));
             ThutCore.LOGGER.error(new IllegalAccessException());
         }
-        this.matcache.clear();
-        this.materials.clear();
-        this.namedMaterials.clear();
-        for (Mesh shape : this.shapes)
+        synchronized (materials)
         {
-            if (this.matcache.add(shape.material))
+            this.matcache.clear();
+            this.materials.clear();
+            this.namedMaterials.clear();
+            for (Mesh shape : this.shapes)
             {
-                this.materials.add(shape.material);
-                this.namedMaterials.put(shape.material.name, shape.material);
+                if (this.matcache.add(shape.material))
+                {
+                    this.materials.add(shape.material);
+                    this.namedMaterials.put(shape.material.name, shape.material);
+                }
             }
         }
     }
 
     @Override
-    public IAnimationHolder getAnimationHolder()
-    {
-        return this.currentHolder;
-    }
-
-    @Override
-    public void setAnimationHolder(final IAnimationHolder holder)
-    {
-        this.currentHolder = holder;
-    }
-
-    @Override
-    public List<String> getRenderOrder()
+    public List<IExtendedModelPart> getRenderOrder()
     {
         return this.order;
     }
@@ -536,6 +500,12 @@ public abstract class Part implements IExtendedModelPart, IRetexturableModel
     public boolean isDisabled()
     {
         return disabled;
+    }
+
+    @Override
+    public void setPostScale(Vector3 scale)
+    {
+        ds2 = (float) scale.mag();
     }
 
     @Override
@@ -562,5 +532,50 @@ public abstract class Part implements IExtendedModelPart, IRetexturableModel
     public boolean isHeadPart()
     {
         return isHead;
+    }
+
+    @Override
+    public void addPartRenderAdder(IPartRenderAdder adder)
+    {
+        if (adder.shouldAddTo(this)) this.renderAdders.add(adder);
+    }
+
+    @Override
+    public Holder<IAnimationHolder> getAnimationHolder()
+    {
+        return this.animHolderHolder;
+    }
+
+    @Override
+    public void setAnimationHolder(Holder<IAnimationHolder> input)
+    {
+        this.animHolderHolder = input;
+        for (var part : this.getRenderOrder()) part.setAnimationHolder(input);
+    }
+
+    @Override
+    public Holder<IAnimationChanger> getAnimationChanger()
+    {
+        return this.animChangeHolder;
+    }
+
+    @Override
+    public void setAnimationChanger(Holder<IAnimationChanger> input)
+    {
+        this.animChangeHolder = input;
+        for (var part : this.getRenderOrder()) if (part instanceof IRetexturableModel p) p.setAnimationChanger(input);
+    }
+
+    @Override
+    public Holder<IPartTexturer> getTexturerChanger()
+    {
+        return this.texChangeHolder;
+    }
+
+    @Override
+    public void setTexturerChanger(Holder<IPartTexturer> input)
+    {
+        this.texChangeHolder = input;
+        for (var part : this.getRenderOrder()) if (part instanceof IRetexturableModel p) p.setTexturerChanger(input);
     }
 }

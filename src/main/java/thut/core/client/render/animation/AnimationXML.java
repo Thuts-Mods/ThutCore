@@ -1,14 +1,28 @@
 package thut.core.client.render.animation;
 
 import java.io.InputStream;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 import javax.xml.namespace.QName;
 
+import org.joml.Vector3f;
+
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
+import com.mojang.blaze3d.vertex.PoseStack;
 
+import net.minecraft.client.Minecraft;
+import net.minecraft.client.multiplayer.ClientLevel;
+import net.minecraft.client.particle.Particle;
+import net.minecraft.core.particles.ParticleOptions;
+import net.minecraft.core.registries.BuiltInRegistries;
+import net.minecraft.resources.ResourceLocation;
+import net.minecraft.world.entity.Entity;
+import thut.core.client.render.model.IExtendedModelPart;
+import thut.core.client.render.model.IExtendedModelPart.IPartRenderAdder;
 import thut.core.common.ThutCore;
 import thut.core.xml.bind.Factory;
 import thut.core.xml.bind.annotation.XmlAnyAttribute;
@@ -18,6 +32,85 @@ import thut.core.xml.bind.annotation.XmlRootElement;
 
 public class AnimationXML
 {
+    @XmlRootElement(name = "particle")
+    public static class ParticleSource implements IPartRenderAdder
+    {
+        @XmlAttribute(name = "density")
+        public float density = 0.1f;
+        @XmlAttribute(name = "name")
+        public String particle = "";
+        @XmlAttribute(name = "parts")
+        public String parts = "";
+        @XmlAttribute(name = "velocity")
+        public String velocity = "0,0,0";
+        @XmlAttribute(name = "offset")
+        public String offset = "0,0,0";
+
+        public Set<String> _requiredStates = new HashSet<>();
+        public Set<String> _bannedStates = new HashSet<>();
+
+        private Set<String> _parts = new HashSet<>();
+
+        private Vector3f _particlePosition = new Vector3f();
+        private Vector3f _particleVelocity = new Vector3f();
+
+        private ResourceLocation _particleType = null;
+        private Vector3f _place = new Vector3f();
+        private ParticleOptions _type = null;
+
+        private void init()
+        {
+            _particleType = ResourceLocation.parse(particle);
+            var parts = this.parts.split(":");
+            _parts.clear();
+            for (var p : parts) _parts.add(p);
+            var _particle = BuiltInRegistries.PARTICLE_TYPE.get(_particleType);
+            if (_particle instanceof ParticleOptions type) _type = type;
+
+            var v3 = AnimationLoader.getVector3(offset, null);
+            if (v3 != null)
+            {
+                _particlePosition.set((float) v3.x, (float) v3.y, (float) v3.z);
+            }
+        }
+
+        @Override
+        public boolean shouldAddTo(IExtendedModelPart part)
+        {
+            if (_particleType == null) init();
+            return _parts.contains(part.getName());
+        }
+
+        @Override
+        public void onRender(PoseStack mat, IExtendedModelPart part)
+        {
+            Entity mob = part.convertToGlobal(mat, _place);
+            if (mob == null || _type == null || !(mob.level() instanceof ClientLevel) || !mob.isAddedToLevel())
+                return;
+            if (ThutCore.getConfig().modelCullThreshold == -1) return;
+            var animated = part.getAnimationHolder().get().getContext();
+            var existing = animated.activeParticles().get(this);
+
+            double rx = _place.x() + _particlePosition.x();
+            double ry = _place.y() + _particlePosition.y();
+            double rz = _place.z() + _particlePosition.z();
+
+            double vx = _particleVelocity.x();
+            double vy = _particleVelocity.y();
+            double vz = _particleVelocity.z();
+
+            if (existing instanceof Particle particle && particle.isAlive())
+            {
+                particle.setPos(rx, ry, rz);
+            }
+            else
+            {
+                var particle = Minecraft.getInstance().particleEngine.createParticle(_type, rx, ry, rz, vx, vy, vz);
+                animated.activeParticles().put(this, particle);
+            }
+        }
+    }
+
     @XmlRootElement(name = "component")
     public static class Component
     {
@@ -112,6 +205,10 @@ public class AnimationXML
         public String shader = "";
         @XmlAttribute(name = "tex")
         public String tex = "";
+        @XmlAttribute(name = "height")
+        public float height = -1;
+        @XmlAttribute(name = "width")
+        public float width = -1;
     }
 
     @XmlRootElement(name = "merges")
@@ -189,7 +286,7 @@ public class AnimationXML
         @XmlAttribute(name = "dye")
         public String dye;
         @XmlAttribute(name = "headAxis")
-        public int headAxis = 1;
+        public int headAxis = 2;
         @XmlAttribute(name = "headAxis2")
         public int headAxis2 = 0;
         @XmlAttribute(name = "headCap")
@@ -197,9 +294,9 @@ public class AnimationXML
         @XmlAttribute(name = "headCap1")
         public String headCap1 = "-30, 70";
         @XmlAttribute(name = "headDir")
-        public int headDir = 1;
+        public int headDir = -1;
         @XmlAttribute(name = "headDir2")
-        public int headDir2 = 2;
+        public int headDir2 = -1;
     }
 
     @XmlRootElement(name = "model")
@@ -221,6 +318,8 @@ public class AnimationXML
         public List<Mat> materials = Lists.newArrayList();
         @XmlElement(name = "subanim")
         public List<SubAnim> subanim = Lists.newArrayList();
+        @XmlElement(name = "particle")
+        public List<ParticleSource> particles = Lists.newArrayList();
     }
 
     @XmlRootElement(name = "phase")

@@ -1,14 +1,7 @@
 package thut.api.level.structures;
 
-import java.util.Collections;
-import java.util.Map;
-import java.util.Map.Entry;
-import java.util.Set;
-import java.util.function.Predicate;
-
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
-
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.SectionPos;
 import net.minecraft.resources.ResourceKey;
@@ -16,26 +9,24 @@ import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.level.ChunkPos;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.levelgen.structure.BoundingBox;
-import net.minecraft.world.level.levelgen.structure.Structure;
-import net.minecraft.world.level.levelgen.structure.StructureStart;
-import net.minecraftforge.event.AttachCapabilitiesEvent;
-import net.minecraftforge.event.level.ChunkEvent;
-import net.minecraftforge.eventbus.api.SubscribeEvent;
+import net.neoforged.bus.api.SubscribeEvent;
+import net.neoforged.neoforge.event.level.ChunkEvent;
 import thut.api.level.structures.NamedVolumes.INamedStructure;
 import thut.api.level.structures.NamedVolumes.NamedStructureWrapper;
 import thut.api.level.terrain.GlobalChunkPos;
-import thut.api.level.terrain.ITerrainProvider;
-import thut.api.level.terrain.TerrainManager;
 import thut.core.common.ThutCore;
 import thut.lib.RegHelper;
+
+import java.util.Collections;
+import java.util.Map;
+import java.util.Set;
+import java.util.function.Predicate;
 
 public class StructureManager
 {
     /**
-     * This is a cache of loaded chunks, it is used to prevent thread lock
-     * contention when trying to look up a chunk, as it seems that
-     * world.chunkExists returning true does not mean that you can just go and
-     * ask for the chunk...
+     * This is a cache of loaded chunks, it is used to prevent thread lock contention when trying to look up a chunk, as
+     * it seems that world.chunkExists returning true does not mean that you can just go and ask for the chunk...
      */
     public static Map<GlobalChunkPos, Set<INamedStructure>> map_by_pos = Maps.newHashMap();
 
@@ -47,45 +38,48 @@ public class StructureManager
             ThutCore.LOGGER.warn("Warning, too big box for {}: {}", structure.getName(), b);
             return;
         }
-        for (int x = b.minX >> 4; x <= b.maxX >> 4; x++) for (int z = b.minZ >> 4; z <= b.maxZ >> 4; z++)
-        {
-            final ChunkPos p = new ChunkPos(x, z);
-            final GlobalChunkPos pos = new GlobalChunkPos(dim, p);
-            final Set<INamedStructure> set = StructureManager.getOrMake(pos);
-            set.add(structure);
-        }
+        for (int x = b.minX() >> 4; x <= b.maxX() >> 4; x++)
+            for (int z = b.minZ() >> 4; z <= b.maxZ() >> 4; z++)
+            {
+                final ChunkPos p = new ChunkPos(x, z);
+                final GlobalChunkPos pos = new GlobalChunkPos(dim, p);
+                final Set<INamedStructure> set = StructureManager.getOrMake(pos);
+                set.add(structure);
+            }
     }
 
     public static Set<INamedStructure> getOrMake(final GlobalChunkPos pos)
     {
-        Set<INamedStructure> set = StructureManager.map_by_pos.get(pos);
-        if (set == null) StructureManager.map_by_pos.put(pos, set = Sets.newHashSet());
-        return set;
+        return StructureManager.map_by_pos.computeIfAbsent(pos, k -> Sets.newHashSet());
     }
 
     public static void remove(ResourceKey<Level> dim, BoundingBox b, Predicate<INamedStructure> structure)
     {
-        for (int x = b.minX >> 4; x <= b.maxX >> 4; x++) for (int z = b.minZ >> 4; z <= b.maxZ >> 4; z++)
-        {
-            final ChunkPos p = new ChunkPos(x, z);
-            final GlobalChunkPos pos = new GlobalChunkPos(dim, p);
-            final Set<INamedStructure> forPos = StructureManager.map_by_pos.getOrDefault(pos, Collections.emptySet());
-            if (!forPos.isEmpty()) forPos.removeIf(structure);
-        }
+        for (int x = b.minX() >> 4; x <= b.maxX() >> 4; x++)
+            for (int z = b.minZ() >> 4; z <= b.maxZ() >> 4; z++)
+            {
+                final ChunkPos p = new ChunkPos(x, z);
+                final GlobalChunkPos pos = new GlobalChunkPos(dim, p);
+                final Set<INamedStructure> forPos = StructureManager.map_by_pos.getOrDefault(pos,
+                        Collections.emptySet());
+                if (!forPos.isEmpty()) forPos.removeIf(structure);
+            }
     }
 
     public static Set<INamedStructure> getColliding(ResourceKey<Level> dim, BoundingBox b)
     {
         final Set<INamedStructure> matches = Sets.newHashSet();
-        for (int x = b.minX >> 4; x <= b.maxX >> 4; x++) for (int z = b.minZ >> 4; z <= b.maxZ >> 4; z++)
-        {
-            final ChunkPos p = new ChunkPos(x, z);
-            final GlobalChunkPos pos = new GlobalChunkPos(dim, p);
-            final Set<INamedStructure> forPos = StructureManager.map_by_pos.getOrDefault(pos, Collections.emptySet());
-            forPos.forEach(structure -> {
-                if (b.intersects(structure.getTotalBounds())) matches.add(structure);
-            });
-        }
+        for (int x = b.minX() >> 4; x <= b.maxX() >> 4; x++)
+            for (int z = b.minZ() >> 4; z <= b.maxZ() >> 4; z++)
+            {
+                final ChunkPos p = new ChunkPos(x, z);
+                final GlobalChunkPos pos = new GlobalChunkPos(dim, p);
+                final Set<INamedStructure> forPos = StructureManager.map_by_pos.getOrDefault(pos,
+                        Collections.emptySet());
+                forPos.forEach(structure -> {
+                    if (b.intersects(structure.getTotalBounds())) matches.add(structure);
+                });
+            }
         return matches;
     }
 
@@ -117,43 +111,35 @@ public class StructureManager
         final ChunkPos origin = new ChunkPos(loc);
         int dr = SectionPos.blockToSectionCoord(distance);
         dr = Math.max(dr, 1);
-        for (int x = origin.x - dr; x <= origin.x + dr; x++) for (int z = origin.z - dr; z <= origin.z + dr; z++)
-            matches.addAll(StructureManager.getNearInt(dim, loc, new ChunkPos(x, z), distance, forSubbiome));
+        for (int x = origin.x - dr; x <= origin.x + dr; x++)
+            for (int z = origin.z - dr; z <= origin.z + dr; z++)
+                matches.addAll(StructureManager.getNearInt(dim, loc, new ChunkPos(x, z), distance, forSubbiome));
         return matches;
-    }
-
-    @SubscribeEvent
-    public static void onLevelCapabilityAttach(final AttachCapabilitiesEvent<Level> event)
-    {
-        if (!(event.getObject() instanceof ServerLevel level)) return;
-        if (event.getCapabilities().containsKey(TerrainManager.TERRAINCAP)) return;
-        event.addCapability(TerrainManager.TERRAINCAP, new CapabilityWorldStructures(level));
     }
 
     @SubscribeEvent
     public static void onChunkLoad(final ChunkEvent.Load evt)
     {
         // The world is null when it is loaded off thread during worldgen!
-        if (!(evt.getLevel() instanceof ServerLevel w) || evt.getLevel().isClientSide()) return;
-        final ResourceKey<Level> dim = w.dimension();
-        var reg = w.registryAccess().registryOrThrow(RegHelper.STRUCTURE_REGISTRY);
-        for (final Entry<Structure, StructureStart> entry : evt.getChunk().getAllStarts()
-                .entrySet())
-        {
-            String name = reg.getKey(entry.getKey()).toString();
-            final NamedStructureWrapper info = new NamedStructureWrapper(w, name, entry);
-            if (!info.start.isValid()) continue;
-
+        if (!(evt.getLevel() instanceof ServerLevel level) || level.isClientSide()) return;
+        final ResourceKey<Level> dim = level.dimension();
+        var reg = level.registryAccess().registryOrThrow(RegHelper.STRUCTURE_REGISTRY);
+        var chunk = evt.getChunk();
+        var starts = level.structureManager().startsForStructure(chunk.getPos(), s -> true);
+        starts.forEach(start -> {
+            var structure = start.getStructure();
+            var name = reg.getKey(structure).toString();
+            final NamedStructureWrapper info = new NamedStructureWrapper(level, name, structure, start);
+            if (!info.start.isValid()) return;
             addStructure(dim, info);
-        }
+        });
     }
 
     @SubscribeEvent
     public static void onChunkUnload(final ChunkEvent.Unload evt)
     {
-        if (!(evt.getLevel() instanceof Level) || evt.getLevel().isClientSide()) return;
-        final Level w = (Level) evt.getLevel();
-        final ResourceKey<Level> dim = w.dimension();
+        if (!(evt.getLevel() instanceof Level level) || level.isClientSide()) return;
+        final ResourceKey<Level> dim = level.dimension();
         final GlobalChunkPos pos = new GlobalChunkPos(dim, evt.getChunk().getPos());
         StructureManager.map_by_pos.remove(pos);
     }
@@ -161,7 +147,5 @@ public class StructureManager
     public static void clear()
     {
         StructureManager.map_by_pos.clear();
-        ITerrainProvider.loadedChunks.clear();
-        ITerrainProvider.pendingCache.clear();
     }
 }

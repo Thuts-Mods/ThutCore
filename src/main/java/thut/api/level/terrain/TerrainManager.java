@@ -1,34 +1,26 @@
 package thut.api.level.terrain;
 
 import net.minecraft.core.BlockPos;
-import net.minecraft.resources.ResourceKey;
-import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.entity.Entity;
-import net.minecraft.world.level.Level;
 import net.minecraft.world.level.LevelAccessor;
 import net.minecraft.world.level.chunk.ChunkSource;
-import net.minecraft.world.level.chunk.LevelChunk;
-import net.minecraftforge.event.AttachCapabilitiesEvent;
-import net.minecraftforge.event.level.ChunkEvent;
-import net.minecraftforge.event.level.ChunkWatchEvent;
-import net.minecraftforge.event.level.LevelEvent;
-import net.minecraftforge.eventbus.api.SubscribeEvent;
-import net.minecraftforge.fml.common.Mod;
-import thut.api.level.terrain.CapabilityTerrain.DefaultProvider;
+import net.neoforged.bus.api.SubscribeEvent;
+import net.neoforged.fml.common.EventBusSubscriber;
+import net.neoforged.neoforge.event.level.ChunkWatchEvent;
+import net.neoforged.neoforge.event.level.LevelEvent;
 import thut.api.maths.Vector3;
 import thut.api.util.PermNodes;
 import thut.api.util.PermNodes.DefaultPermissionLevel;
 import thut.core.common.ThutCore;
 import thut.core.common.network.TerrainUpdate;
 
-@Mod.EventBusSubscriber(bus = Mod.EventBusSubscriber.Bus.FORGE)
+@EventBusSubscriber(bus = EventBusSubscriber.Bus.GAME)
 public class TerrainManager
 {
     public static final String EDIT_SUBBIOMES_PERM = "subbiome.can_edit";
 
-    public static final ResourceLocation TERRAINCAP = new ResourceLocation("thutcore", "terrain");
     private static TerrainManager terrain;
 
     public static void init()
@@ -58,35 +50,18 @@ public class TerrainManager
         final int r = (int) distance >> 4;
         final int x = blockPos.getX() >> 4;
         final int z = blockPos.getZ() >> 4;
-        for (int i = -r; i <= r; i++) for (int j = -r; j <= r; j++)
-        {
-            // getChunkNow returns null if the chunk is not a fully loaded
-            // chunk, and on the server thread.
-            if (source.getChunkNow(x + i, z + j) == null) return false;
-        }
+        for (int i = -r; i <= r; i++)
+            for (int j = -r; j <= r; j++)
+            {
+                // getChunkNow returns null if the chunk is not a fully loaded
+                // chunk, and on the server thread.
+                if (source.getChunkNow(x + i, z + j) == null) return false;
+            }
         return true;
     }
 
     @SubscribeEvent
-    public static void onChunkLoad(final ChunkEvent.Load evt)
-    {
-        ResourceKey<Level> dim = null;
-        if (evt.getLevel() instanceof Level level && !evt.getLevel().isClientSide()) dim = level.dimension();
-        // This is null when this is loaded off-thread, IE before the chunk is
-        // finished
-        if (dim != null) ITerrainProvider.addChunk(dim, evt.getChunk());
-    }
-
-    @SubscribeEvent
-    public static void onChunkUnload(final ChunkEvent.Unload evt)
-    {
-        ResourceKey<Level> dim = null;
-        if (evt.getLevel() instanceof Level level && !evt.getLevel().isClientSide()) dim = level.dimension();
-        if (dim != null) ITerrainProvider.removeChunk(dim, evt.getChunk().getPos());
-    }
-
-    @SubscribeEvent
-    public static void onChunkWatch(final ChunkWatchEvent.Watch event)
+    public static void onChunkWatch(final ChunkWatchEvent.Sent event)
     {
         final ServerPlayer player = event.getPlayer();
         TerrainUpdate.sendTerrainToClient(event.getPos(), player);
@@ -98,18 +73,8 @@ public class TerrainManager
 
     }
 
-    @SubscribeEvent
-    public static void onChunkCapabilityAttach(final AttachCapabilitiesEvent<LevelChunk> event)
-    {
-        if (event.getCapabilities().containsKey(TerrainManager.TERRAINCAP)) return;
-        final LevelChunk chunk = event.getObject();
-        final DefaultProvider terrain = new DefaultProvider(chunk);
-        event.addCapability(TerrainManager.TERRAINCAP, terrain);
-    }
-
     public ITerrainProvider provider = new ITerrainProvider()
-    {
-    };
+    {};
 
     public TerrainSegment getTerrain(final LevelAccessor world, final BlockPos p)
     {
@@ -127,7 +92,9 @@ public class TerrainManager
     public TerrainSegment getTerrainForEntity(final Entity e)
     {
         if (e == null) return null;
-        return this.getTerrain(e.level(), e.getX(), e.getY(), e.getZ());
+        final TerrainSegment ret = this.getTerrain(e.level(), e.getOnPos());
+        if (e.level() instanceof ServerLevel) ret.initBiomes(e.level());
+        return ret;
     }
 
     public TerrainSegment getTerrian(final LevelAccessor world, final Vector3 v)

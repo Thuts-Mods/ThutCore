@@ -1,10 +1,11 @@
 package thut.api.boom;
 
-import it.unimi.dsi.fastutil.objects.Object2FloatMap.Entry;
-import it.unimi.dsi.fastutil.objects.Object2FloatOpenHashMap;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
+
+import it.unimi.dsi.fastutil.objects.Object2FloatMap.Entry;
+import it.unimi.dsi.fastutil.objects.Object2FloatOpenHashMap;
 import net.minecraft.Util;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.particles.ParticleTypes;
@@ -24,13 +25,11 @@ import net.minecraft.world.level.chunk.LevelChunk;
 import net.minecraft.world.level.levelgen.structure.templatesystem.StructurePlaceSettings;
 import net.minecraft.world.level.levelgen.structure.templatesystem.StructureProcessorList;
 import net.minecraft.world.level.levelgen.structure.templatesystem.StructureTemplate.StructureBlockInfo;
-import net.minecraftforge.common.MinecraftForge;
-import net.minecraftforge.event.TickEvent.LevelTickEvent;
-import net.minecraftforge.event.TickEvent.Phase;
-import net.minecraftforge.event.level.ExplosionEvent;
-import net.minecraftforge.event.level.LevelEvent.Unload;
-import net.minecraftforge.eventbus.api.EventPriority;
-import net.minecraftforge.eventbus.api.SubscribeEvent;
+import net.neoforged.bus.api.EventPriority;
+import net.neoforged.bus.api.SubscribeEvent;
+import net.neoforged.neoforge.event.level.ExplosionEvent;
+import net.neoforged.neoforge.event.level.LevelEvent.Unload;
+import net.neoforged.neoforge.event.tick.LevelTickEvent;
 import thut.api.boom.ShadowMaskChecker.ResistProvider;
 import thut.api.entity.event.BreakTestEvent;
 import thut.api.item.ItemList;
@@ -136,7 +135,7 @@ public class ExplosionCustom extends Explosion
 
     public static class DefaultBreaker implements BlockBreaker
     {
-        public static final ResourceLocation DAMAGE_LIST = new ResourceLocation("thutcore:absorption_damage");
+        public static final ResourceLocation DAMAGE_LIST = ResourceLocation.fromNamespaceAndPath("thutcore","absorption_damage");
 
         final ServerLevel level;
         final StructureProcessorList list;
@@ -175,14 +174,14 @@ public class ExplosionCustom extends Explosion
     public static float MINBLASTDAMAGE = 0.1f;
     public static boolean AFFECTINAIR = true;
 
-    public static final ResourceLocation EXPLOSION_BLOCKING = new ResourceLocation("thutcore:explosion_blocking");
-    public static final ResourceLocation EXPLOSION_TRANSPARENT = new ResourceLocation("thutcore:explosion_transparent");
-    public static final ResourceLocation EXPLOSION_2X_WEAK = new ResourceLocation("thutcore:explosion_2x_weaker");
-    public static final ResourceLocation EXPLOSION_10X_WEAK = new ResourceLocation("thutcore:explosion_10x_weaker");
+    public static final ResourceLocation EXPLOSION_BLOCKING = ResourceLocation.fromNamespaceAndPath("thutcore","explosion_blocking");
+    public static final ResourceLocation EXPLOSION_TRANSPARENT = ResourceLocation.fromNamespaceAndPath("thutcore","explosion_transparent");
+    public static final ResourceLocation EXPLOSION_2X_WEAK = ResourceLocation.fromNamespaceAndPath("thutcore","explosion_2x_weaker");
+    public static final ResourceLocation EXPLOSION_10X_WEAK = ResourceLocation.fromNamespaceAndPath("thutcore","explosion_10x_weaker");
 
     public IEntityHitter hitter = (e, power, boom) -> {
         final EntityDimensions size = e.getDimensions(e.getPose());
-        final float area = size.width * size.height;
+        final float area = size.width() * size.height();
         final float damage = area * power;
         if (!e.isInvulnerable()) e.hurt(e.damageSources().explosion(boom), damage);
     };
@@ -228,7 +227,7 @@ public class ExplosionCustom extends Explosion
     public ExplosionCustom(final ServerLevel world, final Entity par2Entity, final Vector3 center, final float power)
     {
         // TODO replace the 2 nulls here with damage source and context!
-        super(world, par2Entity, null, null, center.x, center.y, center.z, power, false, BlockInteraction.DESTROY);
+        super(world, par2Entity, center.x, center.y, center.z, power, false, BlockInteraction.DESTROY);
         this.level = world;
         this.exploder = par2Entity;
         this.centre = center.copy();
@@ -278,7 +277,7 @@ public class ExplosionCustom extends Explosion
                 SoundSource.BLOCKS, 4.0F,
                 (1.0F + (this.level.random.nextFloat() - this.level.random.nextFloat()) * 0.2F) * 0.7F);
         this.level.addParticle(ParticleTypes.EXPLOSION, this.centre.x, this.centre.y, this.centre.z, 1.0D, 0.0D, 0.0D);
-        MinecraftForge.EVENT_BUS.register(this);
+        ThutCore.FORGE_BUS.register(this);
         boomApplier.start();
         if (this.hasSubBooms)
         {
@@ -378,15 +377,15 @@ public class ExplosionCustom extends Explosion
     }
 
     @SubscribeEvent(priority = EventPriority.LOWEST)
-    public void doRemoveBlocks(final LevelTickEvent evt)
+    public void doRemoveBlocks(final LevelTickEvent.Post evt)
     {
-        if (evt.phase == Phase.START || evt.level != this.level) return;
+        if (evt.getLevel() != this.level) return;
 
         if (this.hasSubBooms)
         {
             if (this.subBooms.isEmpty())
             {
-                MinecraftForge.EVENT_BUS.unregister(this);
+                ThutCore.FORGE_BUS.unregister(this);
                 boomDone = true;
             }
             else
@@ -409,7 +408,7 @@ public class ExplosionCustom extends Explosion
         this.applyBlockEffects(result);
         this.applyEntityEffects(result);
         final ExplosionEvent evt2 = new ExplosionEvent.Detonate(this.level, this, this.targets);
-        MinecraftForge.EVENT_BUS.post(evt2);
+        ThutCore.FORGE_BUS.post(evt2);
 
         // Process the chunks and set them not unsaved, this will prevent them
         // re-saving to disk each tick the explosion runs.
@@ -421,7 +420,7 @@ public class ExplosionCustom extends Explosion
 
         if (result.done)
         {
-            MinecraftForge.EVENT_BUS.unregister(this);
+            ThutCore.FORGE_BUS.unregister(this);
             boomApplier.printDebugInfo();
             boomDone = true;
         }
@@ -436,6 +435,6 @@ public class ExplosionCustom extends Explosion
     @SubscribeEvent
     public void WorldUnloadEvent(final Unload evt)
     {
-        if (evt.getLevel() == this.level) MinecraftForge.EVENT_BUS.unregister(this);
+        if (evt.getLevel() == this.level) ThutCore.FORGE_BUS.unregister(this);
     }
 }

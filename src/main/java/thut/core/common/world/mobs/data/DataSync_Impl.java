@@ -1,21 +1,14 @@
 package thut.core.common.world.mobs.data;
 
-import java.util.List;
-import java.util.Map.Entry;
-import java.util.concurrent.locks.Lock;
-import java.util.concurrent.locks.ReadWriteLock;
-import java.util.concurrent.locks.ReentrantReadWriteLock;
-
 import com.google.common.collect.Lists;
-
 import it.unimi.dsi.fastutil.ints.Int2ObjectArrayMap;
-import net.minecraft.core.Direction;
+import net.minecraft.core.HolderLookup.Provider;
+import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.entity.Entity;
-import net.minecraftforge.common.capabilities.Capability;
-import net.minecraftforge.common.capabilities.ICapabilityProvider;
-import net.minecraftforge.common.util.LazyOptional;
-import net.minecraftforge.event.AttachCapabilitiesEvent;
-import thut.api.ThutCaps;
+import net.minecraft.world.level.block.entity.BlockEntity;
+import net.neoforged.neoforge.attachment.AttachmentType;
+import net.neoforged.neoforge.attachment.IAttachmentHolder;
+import net.neoforged.neoforge.registries.DeferredRegister;
 import thut.api.world.mobs.data.Data;
 import thut.api.world.mobs.data.DataSync;
 import thut.core.common.ThutCore;
@@ -23,12 +16,20 @@ import thut.core.common.world.mobs.data.types.Data_Byte;
 import thut.core.common.world.mobs.data.types.Data_Float;
 import thut.core.common.world.mobs.data.types.Data_Int;
 import thut.core.common.world.mobs.data.types.Data_ItemStack;
+import thut.core.common.world.mobs.data.types.Data_Long;
 import thut.core.common.world.mobs.data.types.Data_Seat;
 import thut.core.common.world.mobs.data.types.Data_String;
 import thut.core.common.world.mobs.data.types.Data_UUID;
 import thut.core.common.world.mobs.data.types.Data_Vec3;
 
-public class DataSync_Impl implements DataSync, ICapabilityProvider
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Map.Entry;
+import java.util.function.Supplier;
+
+public class DataSync_Impl implements DataSync
 {
     public static Int2ObjectArrayMap<Class<? extends Data<?>>> REGISTRY = new Int2ObjectArrayMap<>();
 
@@ -42,6 +43,7 @@ public class DataSync_Impl implements DataSync, ICapabilityProvider
         DataSync_Impl.addMapping(Data_ItemStack.class);
         DataSync_Impl.addMapping(Data_Vec3.class);
         DataSync_Impl.addMapping(Data_Seat.class);
+        DataSync_Impl.addMapping(Data_Long.class);
     }
 
     public static void addMapping(final Class<? extends Data<?>> dataType)
@@ -49,144 +51,139 @@ public class DataSync_Impl implements DataSync, ICapabilityProvider
         DataSync_Impl.REGISTRY.put(DataSync_Impl.REGISTRY.size(), dataType);
     }
 
-    /**
-     * Used to check if a data sync is already registered for this mob.
-     * 
-     * @param event
-     * @return
-     */
-    public static DataSync getData(final AttachCapabilitiesEvent<Entity> event)
-    {
-        for (final ICapabilityProvider provider : event.getCapabilities().values())
-            if (provider.getCapability(ThutCaps.DATASYNC).isPresent())
-                return provider.getCapability(ThutCaps.DATASYNC).orElse(null);
-        return null;
-    }
-
     @SuppressWarnings("deprecation")
-    public static int getID(final Data<?> data)
+    public static void initID(final Data<?> data)
     {
-        if (data.getUID() != -1) return data.getUID();
+        if (data.getUID() != -1)
+        {
+            data.getUID();
+            return;
+        }
         for (final Entry<Integer, Class<? extends Data<?>>> entry : DataSync_Impl.REGISTRY.entrySet())
             if (entry.getValue() == data.getClass())
-        {
-            data.setUID(entry.getKey());
-            return data.getUID();
-        }
+            {
+                data.setUID(entry.getKey());
+                data.getUID();
+                return;
+            }
         throw new NullPointerException("Datatype not found for " + data);
     }
 
     @SuppressWarnings("unchecked")
-    public static <T> T makeData(final int id) throws Exception
+    public static <T> T makeData(String name, int id) throws Exception
     {
         final Class<? extends Data<?>> dataType = DataSync_Impl.REGISTRY.get(id);
         if (dataType == null) throw new NullPointerException("No type registered for ID: " + id);
-        final Data<?> data = dataType.getConstructor().newInstance();
-        DataSync_Impl.getID(data);
+        final Data<?> data = dataType.getConstructor(String.class).newInstance(name);
+        DataSync_Impl.initID(data);
         return (T) data;
     }
 
-    private Int2ObjectArrayMap<Data<?>> data = new Int2ObjectArrayMap<>();
-    private Int2ObjectArrayMap<Data<?>> readCache = new Int2ObjectArrayMap<>();
-    private final LazyOptional<DataSync> holder = LazyOptional.of(() -> this);
-
-    private final ReadWriteLock lock = new ReentrantReadWriteLock();
-
-    private final Lock r = this.lock.readLock();
-    private final Lock w = this.lock.writeLock();
+    private final List<Data<?>> data = new ArrayList<>();
 
     private long tick;
+    private String regTag = "unk";
+    private boolean syncNow = false, needInit = false;
 
-    private boolean syncNow = false;
-
-    private int offset = ThutCore.newRandom().nextInt();
+    private final int offset = ThutCore.newRandom().nextInt(1024);
+    protected Provider provider = null;
 
     @Override
-    @SuppressWarnings("unchecked")
-    public <T> T get(final int key)
+    public void setHolderLookup(Provider provider)
     {
-        return (T) this.readCache.get(key).get();
+        this.provider = provider;
     }
 
     @Override
     public List<Data<?>> getAll()
     {
-        List<Data<?>> list = null;
-        this.r.lock();
-        for (final Data<?> value : this.data.values())
-        {
-            if (list == null) list = Lists.newArrayList();
-            list.add(value);
-        }
-        this.r.unlock();
+        List<Data<?>> list = new ArrayList<>(this.data);
         syncNow = false;
         return list;
-    }
-
-    @Override
-    public <T> LazyOptional<T> getCapability(final Capability<T> capability, final Direction facing)
-    {
-        return ThutCaps.DATASYNC.orEmpty(capability, this.holder);
     }
 
     @Override
     public List<Data<?>> getDirty()
     {
         List<Data<?>> list = null;
-        this.r.lock();
-        for (final Data<?> value : this.data.values()) if (value.dirty())
-        {
-            if (list == null) list = Lists.newArrayList();
-            list.add(value);
-        }
-        this.r.unlock();
+        for (final Data<?> value : this.data)
+            if (value.dirty())
+            {
+                if (list == null) list = Lists.newArrayList();
+                list.add(value);
+            }
         syncNow = false;
         return list;
     }
 
     @Override
-    public <T> int register(final Data<T> data, final T value)
+    public <T> Data<T> register(final Data<T> data)
     {
-        data.set(value);
+        data.setHolderLookup(this.provider);
+        data.setSync(this);
+        data.setTag(this.regTag);
         final int id = this.data.size();
         data.setID(id);
         // Initialize the UID for this data.
-        DataSync_Impl.getID(data);
-        this.data.put(id, data);
-        this.readCache.put(id, data);
-        return id;
+        DataSync_Impl.initID(data);
+        this.data.add(data);
+        needInit = true;
+        for (int i = 0; i < this.data.size(); i++) this.data.get(i).setID(i);
+        return data;
     }
 
     @Override
-    public <T> void set(final int key, final T value)
+    public void setRegisterTag(String tag)
     {
-        this.w.lock();
-        @SuppressWarnings("unchecked")
-        final Data<T> type = (Data<T>) this.data.get(key);
-        type.set(value);
-        if (type.isRealtime() && type.dirty()) syncNow = true;
-        this.w.unlock();
+        this.regTag = tag;
+    }
+
+    @Override
+    public void setSyncNow()
+    {
+        syncNow = true;
     }
 
     @Override
     public void update(final List<Data<?>> values)
     {
-        this.w.lock();
         for (final Data<?> value : values)
         {
-            // Only update things we already have. This fixes issues on
-            // server/client syncing when both sides have not fully initialized.
-            if (!this.data.containsKey(value.getID())) continue;
             final Data<?> old = this.data.get(value.getID());
             final int uid1 = value.getUID();
             final int uid2 = old.getUID();
             // Only update same values, things can go funny on initial syncing
             // if things have not initialized on both sides yet.
             if (uid1 != uid2) continue;
-            this.data.put(value.getID(), value);
-            this.readCache.put(value.getID(), value);
+            old.setRaw(value.get());
         }
-        this.w.unlock();
+    }
+
+    @Override
+    public boolean needInit()
+    {
+        return needInit;
+    }
+
+    @Override
+    public void clearNeedInit()
+    {
+        needInit = false;
+    }
+
+    @Override
+    public void init(List<Data<?>> values)
+    {
+        Map<String, Data<?>> old = new HashMap<>();
+        this.data.forEach(d -> old.put(d.getTag() + d.getName(), d));
+        this.data.clear();
+        values.forEach(data -> {
+            this.setRegisterTag(data.getTag());
+            var key = data.getTag() + data.getName();
+            var _data = old.getOrDefault(key, data);
+            this.register(_data);
+        });
+        needInit = false;
     }
 
     @Override
@@ -208,9 +205,59 @@ public class DataSync_Impl implements DataSync, ICapabilityProvider
     }
 
     @Override
+    public List<Data<?>> getTagged(String tag)
+    {
+        List<Data<?>> all = getAll();
+        List<Data<?>> list = new ArrayList<>();
+        all.forEach(data -> {if (tag.equals(data.getTag())) list.add(data);});
+        return list;
+    }
+
+    @Override
+    public void clearMatching(String tag)
+    {
+        List<Data<?>> list = getTagged(tag);
+        list.forEach(data -> this.data.removeIf(d -> d.getName().equals(data.getName())));
+    }
+
+    @Override
+    public void mapFrom(DataSync other, String tag)
+    {
+        this.clearMatching(tag);
+        this.setRegisterTag(tag);
+        List<Data<?>> tagged = other.getTagged(tag);
+        for (var d : tagged) this.register(d);
+    }
+
+    @Override
     public boolean syncNow()
     {
         return syncNow;
+    }
+
+    public static DataSync makeProvider(final IAttachmentHolder in)
+    {
+        Provider p = null;
+        if (in instanceof Entity e) p = e.registryAccess();
+        else if (in instanceof BlockEntity b) p = b.getLevel().registryAccess();
+        if (p == null) return null;
+        var impl = new DataSync_Impl();
+        impl.setHolderLookup(p);
+        return impl;
+    }
+
+    public static DataSync get(final IAttachmentHolder in)
+    {
+        return in.getData(TYPE.get());
+    }
+
+    public static final ResourceLocation KEY = ResourceLocation.parse("thutcore:data_sync");
+
+    public static Supplier<AttachmentType<DataSync>> TYPE;
+
+    public static void registerAttachment(DeferredRegister<AttachmentType<?>> registry)
+    {
+        TYPE = registry.register(KEY.getPath(), () -> AttachmentType.builder(DataSync_Impl::makeProvider).build());
     }
 
 }

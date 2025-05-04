@@ -33,12 +33,10 @@ public class ConfigHandler extends ConfigData
     @Configure(category = WORLD, comment = "Structures listed here will have the relevant subbiome applied for if minecraft thinks that the block is inside the structure.")
     public List<String> structure_subbiomes = Lists.newArrayList(
     //@formatter:off pokecube_world:meteorites
-            "{\"struct\":\"#pokecube_world:village\",\"subbiome\":\"village\"}",
-            "{\"struct\":\"#pokecube_world:town\",\"subbiome\":\"village\"}",
-            "{\"struct\":\"#minecraft:village\",\"subbiome\":\"village\"}",
             "{\"struct\":\"#minecraft:on_ocean_explorer_maps\",\"subbiome\":\"monument\"}"
             );
     //@formatter:on
+
     @Configure(category = WORLD, comment = "Does a blanket \"plant material\" check for cuttable and edible plants, rather than relying entirely on the block tags. [Default: true]")
     public boolean autoPopulateLists = true;
 
@@ -68,6 +66,11 @@ public class ConfigHandler extends ConfigData
     public boolean autoBlacklistErroredTEs = true;
     @Configure(category = ConfigHandler.MISC)
     public boolean supress_warns = false;
+    @Configure(category = ConfigHandler.MISC, comment = "Add items to vanilla tabs. [Default: true]")
+    public boolean itemsInCreativeTabs = true;
+
+    @Configure(category = ConfigHandler.CLIENT, comment = "Fancy style GUIs. Set to false for vanilla style GUIs. [Default: true]")
+    public boolean fancyGUI = true;
 
     @Configure(category = ConfigHandler.CLIENT)
     public boolean asyncModelLoads = true;
@@ -106,7 +109,7 @@ public class ConfigHandler extends ConfigData
             IBlockEntity.TEBLACKLIST.add(s);
             IBlockEntity.TEBLACKLIST.add(s.toLowerCase(Locale.ENGLISH));
         }
-        for (final String s : this.blockblacklist) IBlockEntity.BLOCKBLACKLIST.add(new ResourceLocation(s));
+        for (final String s : this.blockblacklist) IBlockEntity.BLOCKBLACKLIST.add(ResourceLocation.parse(s));
         TerrainSegment.biomeCheckers.removeIf(t -> t instanceof ConfigTerrainChecker);
         ConfigTerrainBuilder.process(this.customBiomeMappings);
         if (this.generateCache) Cruncher.init();

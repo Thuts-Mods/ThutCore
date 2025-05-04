@@ -1,27 +1,16 @@
 package thut.core.client.render.animation;
 
-import java.io.FileNotFoundException;
-import java.io.InputStream;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
-
-import javax.annotation.Nonnull;
-import javax.annotation.Nullable;
-import javax.xml.namespace.QName;
-
-import org.joml.Vector3f;
-import org.w3c.dom.Node;
-
 import com.google.common.collect.Sets;
-
 import it.unimi.dsi.fastutil.objects.Object2ObjectOpenHashMap;
 import net.minecraft.client.Minecraft;
 import net.minecraft.resources.ResourceLocation;
+import org.joml.Vector3f;
+import org.w3c.dom.Node;
 import thut.api.ModelHolder;
 import thut.api.entity.IAnimated.IAnimationHolder;
 import thut.api.entity.animation.Animation;
+import thut.api.entity.animation.IAnimationChanger;
+import thut.api.entity.animation.IAnimationChanger.WornOffsets;
 import thut.api.maths.Vector3;
 import thut.core.client.render.animation.AnimationXML.CustomTex;
 import thut.core.client.render.animation.AnimationXML.Mat;
@@ -31,7 +20,6 @@ import thut.core.client.render.animation.AnimationXML.Phase;
 import thut.core.client.render.animation.AnimationXML.TexPart;
 import thut.core.client.render.animation.AnimationXML.Worn;
 import thut.core.client.render.animation.AnimationXML.XMLFile;
-import thut.core.client.render.animation.IAnimationChanger.WornOffsets;
 import thut.core.client.render.model.IExtendedModelPart;
 import thut.core.client.render.model.IModel;
 import thut.core.client.render.model.IModelRenderer;
@@ -42,6 +30,17 @@ import thut.core.client.render.texturing.IPartTexturer;
 import thut.core.client.render.texturing.TextureHelper;
 import thut.core.common.ThutCore;
 import thut.lib.ResourceHelper;
+
+import javax.annotation.Nonnull;
+import javax.annotation.Nullable;
+import javax.xml.namespace.QName;
+import java.io.FileNotFoundException;
+import java.io.InputStream;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
 
 public class AnimationLoader
 {
@@ -104,15 +103,14 @@ public class AnimationLoader
         {
             final XMLFile file = AnimationXML.load(stream);
 
+            Metadata meta = new Metadata();
             // Variables for the head rotation info
-            int headDir = 2;
-            int headDir2 = 2;
-            int headAxis = 2;
-            int headAxis2 = 1;
-            final float[] headCaps =
-            { -100, 100 };
-            final float[] headCaps1 =
-            { -30, 70 };
+            int headDir = meta.headDir;
+            int headDir2 = meta.headDir2;
+            int headAxis = meta.headAxis;
+            int headAxis2 = meta.headAxis2;
+            final float[] headCaps = { -100, 100 };
+            final float[] headCaps1 = { -30, 70 };
 
             if (file.model.customTex != null) file.model.customTex.init();
 
@@ -135,7 +133,7 @@ public class AnimationLoader
             final Map<String, List<Vector5>> phaseList = new Object2ObjectOpenHashMap<>();
             List<Phase> texPhases = new ArrayList<>();
 
-            final Metadata meta = file.model.metadata;
+            meta = file.model.metadata;
             if (meta != null)
             {
                 AnimationLoader.addStrings(meta.head, headNames);
@@ -154,45 +152,46 @@ public class AnimationLoader
             for (final Phase phase : file.model.phases)
                 // Handle global, merges and presets
                 if (phase.name != null)
-            {
-                final String name = ThutCore.trim(phase.name);
-                if (name.equals("global"))
                 {
-                    offset = AnimationLoader.getVector3(phase.values.get(new QName("offset")), offset);
-                    scale = AnimationLoader.getVector3(phase.values.get(new QName("scale")), scale);
-                    rotation = AnimationLoader.getRotation(phase.values.get(new QName("rotation")), rotation);
-                }
-                else if (name.equals("textures")) texPhases.add(phase);
-                else if (AnimationRegistry.animations.containsKey(name))
-                {
-                    if (ThutCore.conf.debug_models) ThutCore.LOGGER.debug("Loading " + name + " for " + holder.name);
-                    try
+                    final String name = ThutCore.trim(phase.name);
+                    if (name.equals("global"))
                     {
-                        final Animation anim = AnimationRegistry.make(phase, null);
-                        if (anim != null) xmlAnimations.add(anim);
+                        offset = AnimationLoader.getVector3(phase.values.get(new QName("offset")), offset);
+                        scale = AnimationLoader.getVector3(phase.values.get(new QName("scale")), scale);
+                        rotation = AnimationLoader.getRotation(phase.values.get(new QName("rotation")), rotation);
                     }
-                    catch (final Exception e)
+                    else if (name.equals("textures")) texPhases.add(phase);
+                    else if (AnimationRegistry.animations.containsKey(name))
                     {
-                        ThutCore.LOGGER.error("Error with animation for model: " + holder.name + " Anim: " + name, e);
+                        if (ThutCore.conf.debug_models)
+                            ThutCore.LOGGER.debug("Loading " + name + " for " + holder.name);
+                        try
+                        {
+                            final Animation anim = AnimationRegistry.make(phase, null);
+                            if (anim != null) xmlAnimations.add(anim);
+                        }
+                        catch (final Exception e)
+                        {
+                            ThutCore.LOGGER.error("Error with animation for model: " + holder.name + " Anim: " + name,
+                                    e);
+                        }
                     }
                 }
-            }
                 // Handle manual animations
                 else if (phase.type != null)
-            {
-                if (ThutCore.conf.debug_models)
-                    ThutCore.LOGGER.debug("Building Animation " + phase.type + " for " + holder.name);
-                final Animation anim = AnimationBuilder.build(phase, model.getParts().keySet(), null);
-                if (anim != null) xmlAnimations.add(anim);
-            }
+                {
+                    if (ThutCore.conf.debug_models)
+                        ThutCore.LOGGER.debug("Building Animation " + phase.type + " for " + holder.name);
+                    final Animation anim = AnimationBuilder.build(phase, model.getParts().keySet(), null);
+                    if (anim != null) xmlAnimations.add(anim);
+                }
 
             // Handle merges
             for (final Merge merge : file.model.merges)
             {
                 final String[] merges = merge.merge.split("->");
                 String key = ThutCore.trim(merges[0]);
-                List<String> toList = mergedAnimations.get(key);
-                if (toList == null) mergedAnimations.put(key, toList = new ArrayList<>());
+                List<String> toList = mergedAnimations.computeIfAbsent(key, k -> new ArrayList<>());
                 toList.add(ThutCore.trim(merges[1]));
                 if (merge.limbs != null)
                 {
@@ -204,11 +203,8 @@ public class AnimationLoader
                 }
             }
 
-            if (renderer != null)
-            {
-                renderer.getAnimations().clear();
-                model.initBuiltInAnimations(renderer, animations);
-            }
+            if (renderer != null) renderer.getAnimations().clear();
+            model.initBuiltInAnimations(renderer, animations);
             animations.addAll(xmlAnimations);
 
             // Handle worn offsets.
@@ -232,13 +228,29 @@ public class AnimationLoader
             // Handle materials
             for (final Mat mat : file.model.materials)
             {
-                model.updateMaterial(mat);
+                try
+                {
+                    model.updateMaterial(mat);
+                }
+                catch (Exception e)
+                {
+                    e.printStackTrace();
+                }
                 if (mat.tex.isBlank()) continue;
                 TexPart part = new TexPart();
                 part.name = mat.name;
                 part.tex = mat.tex;
                 texs.parts.add(part);
             }
+            holder.setLoadedOffset(offset);
+            holder.setLoadedScale(scale);
+
+            if (file.model.particles != null) model.getParts().values().forEach(part -> {
+                for (var m : file.model.particles)
+                {
+                    part.addPartRenderAdder(m);
+                }
+            });
 
             if (renderer != null) synchronized (renderer)
             {
@@ -256,7 +268,7 @@ public class AnimationLoader
 
                 // Handle customTextures
                 texturer.init(texs);
-                if (texs.defaults != null) holder.texture = new ResourceLocation(texs.defaults);
+                if (texs.defaults != null) holder.texture = ResourceLocation.parse(texs.defaults);
                 texturer.init(texs);
 
                 // Apply texture phases (ie texture animations)
@@ -311,14 +323,17 @@ public class AnimationLoader
 
                 // Finalize animation initialization
                 final List<Animation> allAnims = new ArrayList<>();
+                Map<String, List<Animation>> newAnims = new HashMap<>(renderer.getAnimations());
                 // Process the animations
-                for (final List<Animation> anims : renderer.getAnimations().values())
+                for (var entry : newAnims.entrySet())
                 {
-                    AnimationBuilder.processAnimations(anims);
+                    List<Animation> copy = entry.getValue();
+                    AnimationBuilder.processAnimations(copy);
                     // Processing edits the list, so we need to re-add them
                     // here.
-                    allAnims.addAll(anims);
+                    allAnims.addAll(copy);
                 }
+                renderer.getAnimations().putAll(newAnims);
 
                 // Pre-process the animations via the model
                 model.preProcessAnimations(allAnims);
@@ -357,9 +372,8 @@ public class AnimationLoader
                 renderer.setAnimationChanger(animator);
 
                 // Process the head rotation information.
-                if (headDir2 == 2) headDir2 = headDir;
-                if (headDir != 2) renderer.getHeadInfo().yawDirection = headDir;
-                if (headDir2 != 2) renderer.getHeadInfo().pitchDirection = headDir2;
+                renderer.getHeadInfo().yawDirection = headDir;
+                renderer.getHeadInfo().pitchDirection = headDir2;
                 renderer.getHeadInfo().yawAxis = headAxis;
                 renderer.getHeadInfo().pitchAxis = headAxis2;
                 renderer.getHeadInfo().yawCapMin = headCaps[0];
@@ -371,21 +385,22 @@ public class AnimationLoader
             {
                 // Handle customTextures
                 if (texs.defaults != null) holder.texture = holder.texture != null
-                        ? new ResourceLocation(holder.texture.toString().replace(holder.name, texs.defaults))
-                        : new ResourceLocation(holder.model.getNamespace(), texs.defaults);
+                        ? ResourceLocation.parse(holder.texture.toString().replace(holder.name, texs.defaults))
+                        : ResourceLocation.fromNamespaceAndPath(holder.model.getNamespace(), texs.defaults);
 
                 for (IExtendedModelPart p : model.getParts().values())
                 {
                     // Handle customTextures
                     if (texs.defaults != null) holder.texture = holder.texture != null
-                            ? new ResourceLocation(holder.texture.toString().replace(holder.name, texs.defaults))
-                            : new ResourceLocation(holder.model.getNamespace(), texs.defaults);
+                            ? ResourceLocation.parse(holder.texture.toString().replace(holder.name, texs.defaults))
+                            : ResourceLocation.fromNamespaceAndPath(holder.model.getNamespace(), texs.defaults);
                     List<String> matNames = new ArrayList<>();
                     for (TexPart part : texs.parts)
                     {
 
-                        ResourceLocation tex = part.tex.contains(":") ? new ResourceLocation(part.tex)
-                                : new ResourceLocation(holder.model.getNamespace(), part.tex);
+                        ResourceLocation tex = part.tex.contains(":")
+                                ? ResourceLocation.parse(part.tex)
+                                : ResourceLocation.fromNamespaceAndPath(holder.model.getNamespace(), part.tex);
                         if (p.getName().equals(part.name))
                         {
                             for (Material m3 : p.getMaterials())
@@ -412,12 +427,8 @@ public class AnimationLoader
                         m.tex = holder.texture;
                     }
 
-                    if (p.getParent() == null)
-                    {
-                        p.setPreScale(scale);
-                        p.setPreTranslations(offset);
-                        if (noRotation != rotation) p.setDefaultAngles(rotation.x(), rotation.y(), rotation.z());
-                    }
+                    if (p.getParent() == null && noRotation != rotation)
+                        p.setDefaultAngles(rotation.x(), rotation.y(), rotation.z());
                 }
 
             }

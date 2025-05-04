@@ -73,8 +73,8 @@ public interface IBlockEntity
                 final BlockEntity old = world.getBlockEntity(temp);
                 if (old != null)
                 {
-                    CompoundTag tag = old.saveWithFullMetadata();
-                    ret[i - xMin][j - yMin][k - zMin] = BlockEntity.loadStatic(temp, world.getBlockState(temp), tag);
+                    CompoundTag tag = old.saveWithFullMetadata(world.registryAccess());
+                    ret[i - xMin][j - yMin][k - zMin] = BlockEntity.loadStatic(temp, world.getBlockState(temp), tag, world.registryAccess());
                 }
             }
             return ret;
@@ -85,7 +85,7 @@ public interface IBlockEntity
         {
             final T ret = type.create(world);
             // This enforces that min is the lower corner, and max is the upper.
-            final AABB box = new AABB(min, max);
+            final AABB box = AABB.encapsulatingFullBlocks(min, max);
             min = new BlockPos((int) box.minX, (int) box.minY, (int) box.minZ);
             max = new BlockPos((int) box.maxX, (int) box.maxY, (int) box.maxZ);
             final IBlockEntity entity = (IBlockEntity) ret;
@@ -186,7 +186,7 @@ public interface IBlockEntity
                     if (tile != null)
                     {
                         final BlockEntity newTile = entity.level().getBlockEntity(pos);
-                        if (newTile != null) newTile.load(tile.saveWithFullMetadata());
+                        if (newTile != null) newTile.loadWithComponents(tile.saveWithFullMetadata(entity.registryAccess()), entity.registryAccess());
                     }
                 }
             }

@@ -3,6 +3,8 @@ package thut.api.entity.blockentity.world;
 import java.util.List;
 import java.util.function.Predicate;
 
+import org.jetbrains.annotations.Nullable;
+
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.core.Holder;
@@ -13,11 +15,14 @@ import net.minecraft.sounds.SoundEvent;
 import net.minecraft.sounds.SoundSource;
 import net.minecraft.util.RandomSource;
 import net.minecraft.world.DifficultyInstance;
+import net.minecraft.world.TickRateManager;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.flag.FeatureFlagSet;
+import net.minecraft.world.item.alchemy.PotionBrewing;
 import net.minecraft.world.item.crafting.RecipeManager;
 import net.minecraft.world.level.ChunkPos;
+import net.minecraft.world.level.ColorResolver;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.biome.Biome;
 import net.minecraft.world.level.biome.BiomeManager;
@@ -27,8 +32,8 @@ import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.border.WorldBorder;
 import net.minecraft.world.level.chunk.ChunkAccess;
 import net.minecraft.world.level.chunk.ChunkSource;
-import net.minecraft.world.level.chunk.ChunkStatus;
 import net.minecraft.world.level.chunk.LevelChunk;
+import net.minecraft.world.level.chunk.status.ChunkStatus;
 import net.minecraft.world.level.entity.EntityTypeTest;
 import net.minecraft.world.level.entity.LevelCallback;
 import net.minecraft.world.level.entity.LevelEntityGetter;
@@ -39,13 +44,13 @@ import net.minecraft.world.level.levelgen.Heightmap.Types;
 import net.minecraft.world.level.lighting.LevelLightEngine;
 import net.minecraft.world.level.material.Fluid;
 import net.minecraft.world.level.material.FluidState;
+import net.minecraft.world.level.saveddata.maps.MapId;
 import net.minecraft.world.level.saveddata.maps.MapItemSavedData;
 import net.minecraft.world.level.storage.WritableLevelData;
 import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec3;
 import net.minecraft.world.scores.Scoreboard;
 import net.minecraft.world.ticks.LevelTickAccess;
-import org.jetbrains.annotations.Nullable;
 import thut.api.entity.blockentity.IBlockEntity;
 import thut.core.common.network.EntityUpdate;
 
@@ -92,8 +97,9 @@ public class WorldEntity extends Level implements IBlockEntityWorld
 
     public WorldEntity(final Level level)
     {
-        super((WritableLevelData) level.getLevelData(), level.dimension(), level.registryAccess(), level.dimensionTypeRegistration(),
-                level.getProfilerSupplier(), level.isClientSide(), level.isDebug(), 0, 1000);
+        super((WritableLevelData) level.getLevelData(), level.dimension(), level.registryAccess(),
+                level.dimensionTypeRegistration(), level.getProfilerSupplier(), level.isClientSide(), level.isDebug(),
+                0, 1000);
         this.world = level;
         this.chunks = new BlockEntityChunkProvider(this);
     }
@@ -152,6 +158,28 @@ public class WorldEntity extends Level implements IBlockEntityWorld
         IBlockEntityWorld.super.setBlockEntity(mob);
         this.mob = mob;
     }
+
+    // Start of Section for BlockAndTintGetter
+
+    @Override
+    public float getShade(final Direction direction, final boolean p_230487_2_)
+    {
+        return this.world.getShade(direction, p_230487_2_);
+    }
+
+    @Override
+    public LevelLightEngine getLightEngine()
+    {
+        return this.world.getLightEngine();
+    }
+
+    @Override
+    public int getBlockTint(BlockPos pos, ColorResolver colours)
+    {
+        return this.world.getBlockTint(pos, colours);
+    }
+
+    // End of section for BlockAndTintGetter
 
     @Override
     public FluidState getFluidState(final BlockPos pos)
@@ -247,12 +275,6 @@ public class WorldEntity extends Level implements IBlockEntityWorld
     }
 
     @Override
-    public LevelLightEngine getLightEngine()
-    {
-        return this.world.getLightEngine();
-    }
-
-    @Override
     public WorldBorder getWorldBorder()
     {
         return this.world.getWorldBorder();
@@ -271,20 +293,15 @@ public class WorldEntity extends Level implements IBlockEntityWorld
     }
 
     @Override
-    public FeatureFlagSet enabledFeatures() {
-        return null;
-    }
-
-    @Override
-    public float getShade(final Direction p_230487_1_, final boolean p_230487_2_)
+    public FeatureFlagSet enabledFeatures()
     {
-        return this.world.getShade(p_230487_1_, p_230487_2_);
+        return this.world.enabledFeatures();
     }
 
     @Override
     public boolean isStateAtPosition(final BlockPos p_217375_1_, final Predicate<BlockState> p_217375_2_)
     {
-        return false;
+        return this.world.isStateAtPosition(p_217375_1_, p_217375_2_);
     }
 
     @Override
@@ -312,11 +329,11 @@ public class WorldEntity extends Level implements IBlockEntityWorld
         return this.world.getServer();
     }
 
-    @Override
-    public void gameEvent(final Entity p_151549_, final GameEvent p_151550_, final BlockPos p_151551_)
-    {
-        this.world.gameEvent(p_151549_, p_151550_, p_151551_);
-    }
+//    @Override
+//    public void gameEvent(final Entity p_151549_, final GameEvent p_151550_, final BlockPos p_151551_)
+//    {
+//        this.world.gameEvent(p_151549_, p_151550_, p_151551_);
+//    }
 
     @Override
     public <T extends Entity> List<T> getEntities(final EntityTypeTest<Entity, T> p_151464_, final AABB p_151465_,
@@ -349,11 +366,11 @@ public class WorldEntity extends Level implements IBlockEntityWorld
         return this.world.getFluidTicks();
     }
 
-    @Override
-    public void gameEvent(GameEvent p_220404_, Vec3 p_220405_, Context p_220406_)
-    {
-        this.world.gameEvent(p_220404_, p_220405_, p_220406_);
-    }
+//    @Override
+//    public void gameEvent(GameEvent p_220404_, Vec3 p_220405_, Context p_220406_)
+//    {
+//        this.world.gameEvent(p_220404_, p_220405_, p_220406_);
+//    }
 
     public void sendBlockUpdated(BlockPos p_46612_, BlockState p_46613_, BlockState p_46614_, int p_46615_)
     {
@@ -385,24 +402,24 @@ public class WorldEntity extends Level implements IBlockEntityWorld
     {
         return world.getEntity(p_46492_);
     }
-
-    @Override
-    public MapItemSavedData getMapData(String p_46650_)
-    {
-        return world.getMapData(p_46650_);
-    }
-
-    @Override
-    public void setMapData(String p_151533_, MapItemSavedData p_151534_)
-    {
-        world.setMapData(p_151533_, p_151534_);
-    }
-
-    @Override
-    public int getFreeMapId()
-    {
-        return world.getFreeMapId();
-    }
+//
+//    @Override
+//    public MapItemSavedData getMapData(String p_46650_)
+//    {
+//        return world.getMapData(p_46650_);
+//    }
+//
+//    @Override
+//    public void setMapData(String p_151533_, MapItemSavedData p_151534_)
+//    {
+//        world.setMapData(p_151533_, p_151534_);
+//    }
+//
+//    @Override
+//    public int getFreeMapId()
+//    {
+//        return world.getFreeMapId();
+//    }
 
     @Override
     public void destroyBlockProgress(int p_46506_, BlockPos p_46507_, int p_46508_)
@@ -438,7 +455,7 @@ public class WorldEntity extends Level implements IBlockEntityWorld
 
     @Override
     public void playSeededSound(@Nullable Player player, double v, double v1, double v2, Holder<SoundEvent> holder,
-                                SoundSource soundSource, float v3, float v4, long l)
+            SoundSource soundSource, float v3, float v4, long l)
     {
         world.playSeededSound(player, v, v1, v2, holder, soundSource, v3, v4, l);
     }
@@ -448,5 +465,62 @@ public class WorldEntity extends Level implements IBlockEntityWorld
             float p_220376_, float p_220377_, long p_220378_)
     {
         world.playSeededSound(p_220372_, p_220373_, var3, p_220375_, p_220376_, p_220377_, p_220378_);
+    }
+
+    @Override
+    public void gameEvent(Holder<GameEvent> gameEvent, Vec3 pos, Context context)
+    {
+        world.gameEvent(gameEvent, pos, context);
+    }
+
+    @Override
+    public TickRateManager tickRateManager()
+    {
+        return world.tickRateManager();
+    }
+
+    @Override
+    public MapItemSavedData getMapData(MapId mapId)
+    {
+        return world.getMapData(mapId);
+    }
+
+    @Override
+    public void setMapData(MapId mapId, MapItemSavedData mapData)
+    {
+    }
+
+    @Override
+    public MapId getFreeMapId()
+    {
+        return world.getFreeMapId();
+    }
+
+    @Override
+    public PotionBrewing potionBrewing()
+    {
+        return world.potionBrewing();
+    }
+
+    @Override
+    public void setDayTimeFraction(float dayTimeFraction)
+    {
+    }
+
+    @Override
+    public float getDayTimeFraction()
+    {
+        return world.getDayTimeFraction();
+    }
+
+    @Override
+    public float getDayTimePerTick()
+    {
+        return world.getDayTimePerTick();
+    }
+
+    @Override
+    public void setDayTimePerTick(float dayTimePerTick)
+    {
     }
 }

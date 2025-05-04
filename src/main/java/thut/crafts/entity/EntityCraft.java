@@ -17,21 +17,19 @@ import net.minecraft.world.damagesource.DamageSource;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EntityDimensions;
 import net.minecraft.world.entity.EntityType;
-import net.minecraft.world.entity.EquipmentSlot;
 import net.minecraft.world.entity.Pose;
-import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.StairBlock;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.phys.Vec3;
-import net.minecraftforge.common.MinecraftForge;
-import net.minecraftforge.event.TickEvent.LevelTickEvent;
-import net.minecraftforge.eventbus.api.SubscribeEvent;
+import net.neoforged.bus.api.SubscribeEvent;
+import net.neoforged.neoforge.event.tick.LevelTickEvent;
 import thut.api.entity.IMultiplePassengerEntity;
 import thut.api.entity.blockentity.BlockEntityBase;
 import thut.api.entity.blockentity.BlockEntityInteractHandler;
 import thut.api.maths.Vector3;
 import thut.api.maths.vecmath.Vec3f;
+import thut.core.common.ThutCore;
 import thut.core.common.world.mobs.data.types.Data_Seat;
 
 public class EntityCraft extends BlockEntityBase implements IMultiplePassengerEntity
@@ -47,19 +45,19 @@ public class EntityCraft extends BlockEntityBase implements IMultiplePassengerEn
             this.dismounted = dismounted;
             this.craft = craft;
             this.seat = seat;
-            MinecraftForge.EVENT_BUS.register(this);
+            ThutCore.FORGE_BUS.register(this);
         }
 
         @SubscribeEvent
-        public void tick(final LevelTickEvent event)
+        public void tick(final LevelTickEvent.Post event)
         {
-            if (event.level != this.craft.level) return;
-            MinecraftForge.EVENT_BUS.unregister(this);
+            if (event.getLevel() != this.craft.level()) return;
+            ThutCore.FORGE_BUS.unregister(this);
             final double x = this.craft.getX() + this.seat.seat.x;
             final double y = this.craft.getY() + this.seat.seat.y;
             final double z = this.craft.getZ() + this.seat.seat.z;
-            if (this.dismounted instanceof ServerPlayer) ((ServerPlayer) this.dismounted).connection.teleport(x, y, z,
-                    this.dismounted.yRot, this.dismounted.xRot);
+            if (this.dismounted instanceof ServerPlayer player)
+                player.connection.teleport(x, y, z, this.dismounted.getYRot(), this.dismounted.getXRot());
             else this.dismounted.setPos(x, y, z);
         }
     }
@@ -75,16 +73,17 @@ public class EntityCraft extends BlockEntityBase implements IMultiplePassengerEn
     public CraftController controller = new CraftController(this);
     int energy = 0;
     public UUID owner;
-    final Integer[] SEAT = new Integer[10];
+    final Data_Seat[] SEAT = new Data_Seat[10];
 
     EntityDimensions size;
 
     public EntityCraft(final EntityType<EntityCraft> type, final Level par1World)
     {
         super(type, par1World);
+        this.dataSync.setRegisterTag("seats");
         // Define the seats
         for (int i = 0; i < SEAT.length; i++)
-            SEAT[i] = this.dataSync.register(new Data_Seat().setRealtime(), new Seat(new Vec3f(), null));
+            SEAT[i] = (Data_Seat) this.dataSync.register(new Data_Seat("seat_" + i).setRealtime());
     }
 
     @Override
@@ -127,7 +126,7 @@ public class EntityCraft extends BlockEntityBase implements IMultiplePassengerEn
             this.toMoveY = true;
             destY = 1;
         }
-        
+
         if (!(this.toMoveY || this.toMoveX || this.toMoveZ))
         {
             Vec3 v = this.getV();
@@ -141,11 +140,12 @@ public class EntityCraft extends BlockEntityBase implements IMultiplePassengerEn
         }
 
         Seat seat = null;
-        for (int i = 0; i < this.getSeatCount(); i++) if (!this.getSeat(i).getEntityId().equals(Seat.BLANK))
-        {
-            seat = this.getSeat(i);
-            break;
-        }
+        for (int i = 0; i < this.getSeatCount(); i++)
+            if (!this.getSeat(i).getEntityId().equals(Seat.BLANK))
+            {
+                seat = this.getSeat(i);
+                break;
+            }
 
         final float f = (float) Math.sqrt(destX * destX + destZ * destZ);
 
@@ -154,23 +154,23 @@ public class EntityCraft extends BlockEntityBase implements IMultiplePassengerEn
         // Apply rotationYaw to destination
         if (this.controller.forwardInputDown)
         {
-            dx = Mth.sin(-this.yRot * 0.017453292F);
-            dz = Mth.cos(this.yRot * 0.017453292F);
+            dx = Mth.sin(-this.getYRot() * 0.017453292F);
+            dz = Mth.cos(this.getYRot() * 0.017453292F);
         }
         else if (this.controller.backInputDown)
         {
-            dx = -Mth.sin(-this.yRot * 0.017453292F);
-            dz = -Mth.cos(this.yRot * 0.017453292F);
+            dx = -Mth.sin(-this.getYRot() * 0.017453292F);
+            dz = -Mth.cos(this.getYRot() * 0.017453292F);
         }
         else if (this.controller.leftInputDown)
         {
-            dx = Mth.cos(-this.yRot * 0.017453292F);
-            dz = Mth.sin(this.yRot * 0.017453292F);
+            dx = Mth.cos(-this.getYRot() * 0.017453292F);
+            dz = Mth.sin(this.getYRot() * 0.017453292F);
         }
         else if (this.controller.rightInputDown)
         {
-            dx = -Mth.cos(-this.yRot * 0.017453292F);
-            dz = -Mth.sin(this.yRot * 0.017453292F);
+            dx = -Mth.cos(-this.getYRot() * 0.017453292F);
+            dz = -Mth.sin(this.getYRot() * 0.017453292F);
         }
 
         if (Mth.equal(dx, 0)) dx = 0;
@@ -238,7 +238,7 @@ public class EntityCraft extends BlockEntityBase implements IMultiplePassengerEn
         {
             final Seat toSet = this.getSeat(n);
             toSet.seat.set(seat);
-            this.dataSync.set(SEAT[n], toSet);
+            SEAT[n].set(toSet);
             this.setSeatCount(n + 1);
         }
         catch (Exception e)
@@ -256,8 +256,7 @@ public class EntityCraft extends BlockEntityBase implements IMultiplePassengerEn
     }
 
     /**
-     * If a rider of this entity can interact with this entity. Should return
-     * true on the ridden entity if so.
+     * If a rider of this entity can interact with this entity. Should return true on the ridden entity if so.
      *
      * @return if the entity can be interacted with from a rider
      */
@@ -285,7 +284,7 @@ public class EntityCraft extends BlockEntityBase implements IMultiplePassengerEn
         energyCost = Math.max(energyCost, 1);
         power = (this.energy = (int) (this.energy - energyCost)) > 0;
         if (this.energy < 0) this.energy = 0;
-        MinecraftForge.EVENT_BUS.post(new EventCraftConsumePower(this, (long) energyCost));
+        ThutCore.FORGE_BUS.post(new EventCraftConsumePower(this, (long) energyCost));
         if (!power) this.toMoveY = false;
         return power;
     }
@@ -324,7 +323,7 @@ public class EntityCraft extends BlockEntityBase implements IMultiplePassengerEn
     public float getPitch()
     {
         // TODO datawatcher value of pitch.
-        return this.xRot;
+        return this.getXRot();
     }
 
     @Override
@@ -353,7 +352,7 @@ public class EntityCraft extends BlockEntityBase implements IMultiplePassengerEn
 
     Seat getSeat(final int index)
     {
-        return this.dataSync.get(SEAT[index]);
+        return SEAT[index].get();
     }
 
     int getSeatCount()
@@ -370,7 +369,7 @@ public class EntityCraft extends BlockEntityBase implements IMultiplePassengerEn
             final Seat seat = this.getSeat(i);
             ret.add(seat.seat);
         }
-        return null;
+        return ret;
     }
 
     @Override
@@ -384,7 +383,7 @@ public class EntityCraft extends BlockEntityBase implements IMultiplePassengerEn
     @Override
     public float getYaw()
     {
-        return this.yRot;
+        return this.getYRot();
     }
 
     @Override
@@ -409,40 +408,36 @@ public class EntityCraft extends BlockEntityBase implements IMultiplePassengerEn
             {
                 final CompoundTag nbt1 = seatsList.getCompound(i);
                 final Seat seat = Seat.readFromNBT(nbt1);
-                this.dataSync.set(SEAT[i], seat);
+                SEAT[i].set(seat);
             }
         }
     }
 
     @Override
-    protected void defineSynchedData()
+    protected void defineSynchedData(SynchedEntityData.Builder builder)
     {
-        super.defineSynchedData();
-        this.entityData.define(EntityCraft.MAINSEATDW, Integer.valueOf(-1));
-        this.entityData.define(EntityCraft.SEATCOUNT, 0);
+        super.defineSynchedData(builder);
+        builder.define(EntityCraft.MAINSEATDW, -1);
+        builder.define(EntityCraft.SEATCOUNT, 0);
     }
 
     @Override
     protected void removePassenger(final Entity passenger)
     {
         super.removePassenger(passenger);
-        if (!this.level.isClientSide)
-            for (int i = 0; i < this.getSeatCount(); i++) if (this.getSeat(i).getEntityId().equals(passenger.getUUID()))
-        {
-            this.setSeatID(i, Seat.BLANK);
-            new DismountTicker(passenger, this, this.getSeat(i));
-            break;
-        }
+        if (!this.level().isClientSide) for (int i = 0; i < this.getSeatCount(); i++)
+            if (this.getSeat(i).getEntityId().equals(passenger.getUUID()))
+            {
+                this.setSeatID(i, Seat.BLANK);
+                new DismountTicker(passenger, this, this.getSeat(i));
+                break;
+            }
     }
 
     public void setEnergy(final int energy)
     {
         this.energy = energy;
     }
-
-    @Override
-    public void setItemSlot(final EquipmentSlot slotIn, final ItemStack stack)
-    {}
 
     /** @return the destinationFloor */
     public void setMainSeat(final int seat)
@@ -463,7 +458,7 @@ public class EntityCraft extends BlockEntityBase implements IMultiplePassengerEn
         {
             toSet = (Seat) toSet.clone();
             toSet.setEntityId(id);
-            this.dataSync.set(SEAT[index], toSet);
+            SEAT[index].set(toSet);
         }
     }
 
@@ -474,21 +469,11 @@ public class EntityCraft extends BlockEntityBase implements IMultiplePassengerEn
     }
 
     @Override
-    public void positionRider(final Entity passenger, MoveFunction moveFunction)
+    protected Vec3 getPassengerAttachmentPoint(Entity entity, EntityDimensions dimensions, float partialTick)
     {
-        if (this.hasPassenger(passenger))
-        {
-            if (passenger.isShiftKeyDown()) passenger.stopRiding();
-            IMultiplePassengerEntity.MultiplePassengerManager.managePassenger(passenger, this);
-            passenger.setOnGround(true);
-            passenger.causeFallDamage(passenger.fallDistance, 0, passenger.damageSources().generic());
-            passenger.fallDistance = 0;
-            if (passenger instanceof ServerPlayer player)
-            {
-                player.connection.aboveGroundVehicleTickCount = 0;
-                player.connection.aboveGroundTickCount = 0;
-            }
-        }
+        var v = this.getSeat(entity);
+        if (v != null) return this.getPosition(partialTick).add(v.x, v.y, v.z);
+        return super.getPassengerAttachmentPoint(entity, dimensions, partialTick);
     }
 
     @Override
@@ -504,7 +489,7 @@ public class EntityCraft extends BlockEntityBase implements IMultiplePassengerEn
     {
         final Seat seat = (Seat) this.getSeat(index).clone();
         seat.setEntityId(id);
-        this.dataSync.set(SEAT[index], seat);
+        SEAT[index].set(seat);
     }
 
     @Override

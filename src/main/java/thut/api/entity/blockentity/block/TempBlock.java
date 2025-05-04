@@ -3,8 +3,10 @@ package thut.api.entity.blockentity.block;
 import net.minecraft.core.BlockPos;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.InteractionResult;
+import net.minecraft.world.ItemInteractionResult;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.player.Player;
+import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.BlockGetter;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.LevelReader;
@@ -26,11 +28,11 @@ import net.minecraft.world.phys.shapes.CollisionContext;
 import net.minecraft.world.phys.shapes.EntityCollisionContext;
 import net.minecraft.world.phys.shapes.Shapes;
 import net.minecraft.world.phys.shapes.VoxelShape;
-import net.minecraftforge.common.MinecraftForge;
-import net.minecraftforge.event.entity.player.PlayerInteractEvent;
-import net.minecraftforge.eventbus.api.Event.Result;
-import net.minecraftforge.eventbus.api.EventPriority;
+import net.neoforged.bus.api.EventPriority;
+import net.neoforged.neoforge.common.util.TriState;
+import net.neoforged.neoforge.event.entity.player.PlayerInteractEvent;
 import thut.api.block.ITickTile;
+import thut.core.common.ThutCore;
 
 public class TempBlock extends AirBlock implements EntityBlock
 {
@@ -57,7 +59,7 @@ public class TempBlock extends AirBlock implements EntityBlock
         super(properties);
         this.registerDefaultState(
                 this.stateDefinition.any().setValue(TempBlock.LIGHTLEVEL, 0).setValue(TempBlock.WATERLOGGED, false));
-        MinecraftForge.EVENT_BUS.addListener(EventPriority.LOWEST, this::onPlayerInteract);
+        ThutCore.FORGE_BUS.addListener(EventPriority.LOWEST, this::onPlayerInteract);
     }
 
     @Override
@@ -85,12 +87,12 @@ public class TempBlock extends AirBlock implements EntityBlock
             BlockPos pos = event.getPos();
             BlockState state = world.getBlockState(pos);
             InteractionHand hand = event.getHand();
-            InteractionResult result = temp.use(state, world, pos, player, hand, trace);
-            if (result != InteractionResult.PASS)
+            ItemInteractionResult result = temp.useItemOn(event.getItemStack(), state, world, pos, player, hand, trace);
+            if (result != ItemInteractionResult.PASS_TO_DEFAULT_BLOCK_INTERACTION)
             {
                 event.setCanceled(true);
-                event.setUseBlock(Result.ALLOW);
-                event.setUseItem(Result.ALLOW);
+                event.setUseBlock(TriState.DEFAULT);
+                event.setUseItem(TriState.DEFAULT);
             }
         }
     }
@@ -111,12 +113,21 @@ public class TempBlock extends AirBlock implements EntityBlock
     }
 
     @Override
-    public InteractionResult use(final BlockState state, final Level world, final BlockPos pos, final Player player,
-            final InteractionHand hand, final BlockHitResult hit)
+    public InteractionResult useWithoutItem(final BlockState state, final Level world, final BlockPos pos, final Player player,
+    		final BlockHitResult hit)
     {
         final BlockEntity tile = world.getBlockEntity(pos);
-        if (tile instanceof TempTile temp) return temp.use(state, world, pos, player, hand, hit);
+        if (tile instanceof TempTile temp) return temp.useWithoutItem(state, world, pos, player, hit);
         return InteractionResult.PASS;
+    }
+    
+    @Override
+    protected ItemInteractionResult useItemOn(ItemStack stack, BlockState state, Level level, BlockPos pos,
+            Player player, InteractionHand hand, BlockHitResult hitResult)
+    {
+        final BlockEntity tile = level.getBlockEntity(pos);
+        if (tile instanceof TempTile temp) return temp.useItemOn(stack, state, level, pos, player, hand, hitResult);
+        return ItemInteractionResult.PASS_TO_DEFAULT_BLOCK_INTERACTION;
     }
 
     @Override

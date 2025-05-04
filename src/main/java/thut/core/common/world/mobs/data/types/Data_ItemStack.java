@@ -4,26 +4,20 @@ import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
 import net.minecraft.network.FriendlyByteBuf;
 import net.minecraft.world.item.ItemStack;
+import thut.api.world.mobs.data.Data;
 
 public class Data_ItemStack extends Data_Base<ItemStack>
 {
-    ItemStack value = ItemStack.EMPTY;
-
-    public Data_ItemStack()
+    public Data_ItemStack(String name)
     {
-        this.initLast(this.value);
+        super(name);
+        this.value = ItemStack.EMPTY;
     }
 
     @Override
     public ItemStack get()
     {
         return this.value;
-    }
-
-    @Override
-    protected boolean isDifferent(ItemStack last, ItemStack value)
-    {
-        return !ItemStack.matches(last, value);
     }
 
     @Override
@@ -37,7 +31,9 @@ public class Data_ItemStack extends Data_Base<ItemStack>
         try
         {
             wrapped.writeBytes(dst);
-            this.value = wrapped.readItem();
+            byte value = wrapped.readByte();
+            if (value == 1) this.value = ItemStack.parseOptional(provider, wrapped.readNbt());
+            else this.value = ItemStack.EMPTY;
         }
         catch (final Exception e)
         {
@@ -46,16 +42,19 @@ public class Data_ItemStack extends Data_Base<ItemStack>
     }
 
     @Override
-    public void set(ItemStack value)
+    public Data<ItemStack> set(ItemStack value)
     {
         if (value.isEmpty())
         {
-            if (this.value.isEmpty()) return;
+            if (this.value.isEmpty()) return this;
             this.value = ItemStack.EMPTY;
-            return;
+            this.setDirty(true);
+            return this;
         }
-        if (value.equals(this.value)) return;
+        if (ItemStack.matches(value, this.value)) return this;
         this.value = value;
+        this.setDirty(true);
+        return this;
     }
 
     @Override
@@ -63,7 +62,12 @@ public class Data_ItemStack extends Data_Base<ItemStack>
     {
         super.write(buf);
         final FriendlyByteBuf wrapped = new FriendlyByteBuf(Unpooled.buffer(0));
-        wrapped.writeItem(this.value);
+        if (this.value.isEmpty()) wrapped.writeByte(0);
+        else
+        {
+            wrapped.writeByte(1);
+            wrapped.writeNbt(this.value.save(provider));
+        }
         final int num = wrapped.readableBytes();
         buf.writeInt(num);
         buf.writeBytes(wrapped);

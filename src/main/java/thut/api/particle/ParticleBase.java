@@ -2,62 +2,62 @@ package thut.api.particle;
 
 import com.mojang.blaze3d.vertex.VertexConsumer;
 import com.mojang.brigadier.StringReader;
-import com.mojang.brigadier.exceptions.CommandSyntaxException;
-import com.mojang.serialization.Codec;
-
+import com.mojang.serialization.MapCodec;
 import net.minecraft.client.Camera;
+import net.minecraft.client.particle.SingleQuadParticle;
 import net.minecraft.core.particles.ParticleOptions;
 import net.minecraft.core.particles.ParticleType;
 import net.minecraft.network.FriendlyByteBuf;
+import net.minecraft.network.RegistryFriendlyByteBuf;
+import net.minecraft.network.codec.StreamCodec;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.item.DyeColor;
-import net.minecraftforge.api.distmarker.Dist;
-import net.minecraftforge.api.distmarker.OnlyIn;
-import net.minecraftforge.registries.ForgeRegistries;
+import net.neoforged.api.distmarker.Dist;
+import net.neoforged.api.distmarker.OnlyIn;
 import org.joml.Quaternionf;
 import org.joml.Vector3f;
 import thut.api.maths.Vector3;
+import thut.api.maths.vecmath.Vec3f;
 import thut.core.common.ThutCore;
 
 public class ParticleBase extends ParticleType<ParticleBase> implements IParticle, IAnimatedParticle, ParticleOptions
 {
-    @SuppressWarnings("deprecation")
-    private static final ParticleOptions.Deserializer<ParticleBase> DESERIALIZER = new ParticleOptions.Deserializer<>()
+    private static class Codec implements StreamCodec<RegistryFriendlyByteBuf, ParticleBase>
     {
+
         @Override
-        public ParticleBase fromCommand(final ParticleType<ParticleBase> particleTypeIn, final StringReader reader)
-                throws CommandSyntaxException
+        public ParticleBase decode(RegistryFriendlyByteBuf buffer)
         {
-            return ((ParticleBase) particleTypeIn).read(reader);
+            return new ParticleBase(0, 0).read(buffer);
         }
 
         @Override
-        public ParticleBase fromNetwork(final ParticleType<ParticleBase> particleTypeIn, final FriendlyByteBuf buffer)
+        public void encode(RegistryFriendlyByteBuf buffer, ParticleBase value)
         {
-            return ((ParticleBase) particleTypeIn).read(buffer);
+            value.writeToNetwork(buffer);
         }
-    };
 
-    public static ResourceLocation TEXTUREMAP = new ResourceLocation(ThutCore.MODID, "textures/particles.png");
+    }
 
-    private final Codec<ParticleBase> codec = Codec.unit(this);
+    public static ResourceLocation TEXTUREMAP = ResourceLocation.fromNamespaceAndPath(ThutCore.MODID,
+            "textures/particles.png");
 
-    public int     duration  = 10;
-    public int     lifetime  = 10;
-    public int     initTime  = 0;
-    public long    lastTick  = 0;
-    public int     animSpeed = 2;
-    public float   size      = 1;
-    public int     rgba      = 0xFFFFFFFF;
+    public int duration = 10;
+    public int lifetime = 10;
+    public int initTime = 0;
+    public long lastTick = 0;
+    public int animSpeed = 2;
+    public float size = 1;
+    public int rgba = 0xFFFFFFFF;
     public boolean billboard = true;
-    public String  name      = "";
-    public Vector3 velocity  = Vector3.empty;
-    public Vector3 position  = Vector3.empty;
-    public int[][] tex       = new int[1][2];
+    public String name = "";
+    public Vector3 velocity = Vector3.empty;
+    public Vector3 position = Vector3.empty;
+    public int[][] tex = new int[1][2];
 
     public ParticleBase(final int x, final int y)
     {
-        super(true, ParticleBase.DESERIALIZER);
+        super(true);
         this.tex[0][0] = x;
         this.tex[0][1] = y;
     }
@@ -69,14 +69,7 @@ public class ParticleBase extends ParticleType<ParticleBase> implements IParticl
     }
 
     @Override
-    public String writeToString()
-    {
-        // TODO jsonify ourselves maybe?
-        return ForgeRegistries.PARTICLE_TYPES.getKey(this).toString();
-    }
-
-    @Override
-    public ParticleType<?> getType()
+    public ParticleBase getType()
     {
         return this;
     }
@@ -111,23 +104,75 @@ public class ParticleBase extends ParticleType<ParticleBase> implements IParticl
         return this;
     }
 
+    protected float rCol = 1.0F;
+    protected float gCol = 1.0F;
+    protected float bCol = 1.0F;
+    protected float alpha = 1.0F;
+
     protected ParticleBase read(final StringReader reader)
     {// TODO finish this?
         return this;
     }
 
-    protected void render(final VertexConsumer buffer, final Quaternionf quaternion,
-            final thut.api.maths.vecmath.Vec3f offset)
+    protected void renderRotatedQuad(VertexConsumer buffer, Vec3f source, Quaternionf quaternion, float partialTicks)
     {
+        this.renderRotatedQuad(buffer, quaternion, source.getX(), source.getY(), source.getZ(), partialTicks);
+    }
+
+    protected void renderRotatedQuad(VertexConsumer buffer, Quaternionf quaternion, float x, float y, float z,
+            float partialTicks)
+    {
+        final int num = this.getDuration() / this.animSpeed % this.tex.length;
+        final int u = this.tex[num][0], v = this.tex[num][1];
+        final float u0 = u * 1f / 16f, v0 = v * 1f / 16f;
+        final float u1 = (u + 1) * 1f / 16f, v1 = (v + 1) * 1f / 16f;
+        float f = this.size;
+        int i = this.getLightColor(partialTicks);
+        this.renderVertex(buffer, quaternion, x, y, z, 1.0F, -1.0F, f, u1, v1, i);
+        this.renderVertex(buffer, quaternion, x, y, z, 1.0F, 1.0F, f, u1, v0, i);
+        this.renderVertex(buffer, quaternion, x, y, z, -1.0F, 1.0F, f, u0, v0, i);
+        this.renderVertex(buffer, quaternion, x, y, z, -1.0F, -1.0F, f, u0, v1, i);
+    }
+
+    private void renderVertex(VertexConsumer buffer, Quaternionf quaternion, float x, float y, float z, float xOffset,
+            float yOffset, float quadSize, float u, float v, int packedLight)
+    {
+        Vector3f vector3f = new Vector3f(xOffset, yOffset, 0.0F).rotate(quaternion).mul(quadSize).add(x, y, z);
+        buffer.addVertex(vector3f.x(), vector3f.y(), vector3f.z()).setUv(u, v)
+                .setColor(this.rCol, this.gCol, this.bCol, this.alpha).setLight(packedLight);
+    }
+
+    public Quaternionf getQuat(Camera renderInfo, float partialTicks)
+    {
+        var quaternion = new Quaternionf();
+        var mode = this.billboard
+                ? SingleQuadParticle.FacingCameraMode.LOOKAT_Y
+                : SingleQuadParticle.FacingCameraMode.LOOKAT_XYZ;
+        mode.setRotation(quaternion, renderInfo, partialTicks);
+        return quaternion;
+    }
+
+    protected int getLightColor(float partialTick)
+    {
+        // TODO add a configuration for the particle lightmap, vanilla has the particles aware of their location and level
+        return 15 << 20 | 15 << 4;
+    }
+
+    @Override
+    @OnlyIn(value = Dist.CLIENT)
+    public void renderParticle(final VertexConsumer buffer, final Camera renderInfo, final float partialTicks,
+            final Vec3f offset)
+    {
+        Quaternionf quaternion = getQuat(renderInfo, partialTicks);
+
         final Vector3f vector3f1 = new Vector3f(-1.0F, -1.0F, 0.0F);
-        // TODO: check this
         quaternion.transform(vector3f1);
         final Vector3f[] verts = new Vector3f[] { //@formatter:off
                 new Vector3f(-1.0F, -1.0F, 0.0F),
                 new Vector3f(-1.0F, 1.0F, 0.0F),
                 new Vector3f(1.0F, 1.0F, 0.0F),
                 new Vector3f(1.0F, -1.0F, 0.0F)
-                };//@formatter:on
+        };//@formatter:on
         final float f4 = this.size;
 
         for (int i = 0; i < 4; ++i)
@@ -139,32 +184,12 @@ public class ParticleBase extends ParticleType<ParticleBase> implements IParticl
         }
         this.setColour();
 
-        final float a = (this.rgba >> 24 & 255) / 255f;
-        final float r = (this.rgba >> 16 & 255) / 255f;
-        final float g = (this.rgba >> 8 & 255) / 255f;
-        final float b = (this.rgba & 255) / 255f;
-        // DOLATER add a configuration for the particle lightmap
-        final int j = 15 << 20 | 15 << 4;
+        alpha = (this.rgba >> 24 & 255) / 255f;
+        rCol = (this.rgba >> 16 & 255) / 255f;
+        gCol = (this.rgba >> 8 & 255) / 255f;
+        bCol = (this.rgba & 255) / 255f;
 
-        final int num = this.getDuration() / this.animSpeed % this.tex.length;
-        final int u = this.tex[num][0], v = this.tex[num][1];
-        final float u1 = u * 1f / 16f, v1 = v * 1f / 16f;
-        final float u2 = (u + 1) * 1f / 16f, v2 = (v + 1) * 1f / 16f;
-
-        buffer.vertex(verts[0].x(), verts[0].y(), verts[0].z()).color(r, g, b, a).uv(u1, v2).uv2(j).endVertex();
-        buffer.vertex(verts[1].x(), verts[1].y(), verts[1].z()).color(r, g, b, a).uv(u2, v2).uv2(j).endVertex();
-        buffer.vertex(verts[2].x(), verts[2].y(), verts[2].z()).color(r, g, b, a).uv(u2, v1).uv2(j).endVertex();
-        buffer.vertex(verts[3].x(), verts[3].y(), verts[3].z()).color(r, g, b, a).uv(u1, v1).uv2(j).endVertex();
-    }
-
-    @Override
-    @OnlyIn(value = Dist.CLIENT)
-    public void renderParticle(final VertexConsumer buffer, final Camera renderInfo, final float partialTicks,
-            final thut.api.maths.vecmath.Vec3f offset)
-    {
-        Quaternionf quaternion;
-        quaternion = renderInfo.rotation();
-        this.render(buffer, quaternion, offset);
+        this.renderRotatedQuad(buffer, offset, quaternion, partialTicks);
     }
 
     @Override
@@ -236,7 +261,6 @@ public class ParticleBase extends ParticleType<ParticleBase> implements IParticl
         this.velocity = v;
     }
 
-    @Override
     public void writeToNetwork(final FriendlyByteBuf buffer)
     {
         buffer.writeInt(this.duration);
@@ -254,9 +278,18 @@ public class ParticleBase extends ParticleType<ParticleBase> implements IParticl
             buffer.writeVarIntArray(element);
     }
 
+    private final MapCodec<ParticleBase> codec = MapCodec.unit(this::getType);
+    private static final Codec CODEC = new Codec();
+
     @Override
-    public Codec<ParticleBase> codec()
+    public MapCodec<ParticleBase> codec()
     {
-        return this.codec;
+        return codec;
+    }
+
+    @Override
+    public StreamCodec<? super RegistryFriendlyByteBuf, ParticleBase> streamCodec()
+    {
+        return CODEC;
     }
 }

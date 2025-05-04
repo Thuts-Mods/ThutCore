@@ -19,21 +19,21 @@ public class TerrainChecker
 
     public static BiomeType INSIDE = BiomeType.getBiome("inside", true).setNoSave();
 
-    public static ResourceLocation CAVE_TAG = new ResourceLocation(ThutCore.MODID, "cave");
-    public static ResourceLocation FRUIT_TAG = new ResourceLocation(ThutCore.MODID, "fruit");
-    public static ResourceLocation GROUND_TAG = new ResourceLocation(ThutCore.MODID, "ground");
-    public static ResourceLocation INDUSTRIAL_TAG = new ResourceLocation(ThutCore.MODID, "industrial");
-    public static ResourceLocation PLANTS_EDIBLE_TAG = new ResourceLocation(ThutCore.MODID, "plants_edible");
-    public static ResourceLocation PLANTS_CUTABLE_TAG = new ResourceLocation(ThutCore.MODID, "plants_cutable");
-    public static ResourceLocation ROCK_TAG = new ResourceLocation(ThutCore.MODID, "rocks");
-    public static ResourceLocation SURFACE_TAG = new ResourceLocation(ThutCore.MODID, "surface");
-    public static ResourceLocation TERRAIN_TAG = new ResourceLocation(ThutCore.MODID, "terrain");
-    public static ResourceLocation WOOD_TAG = new ResourceLocation(ThutCore.MODID, "wood");
+    public static ResourceLocation CAVE_TAG = ResourceLocation.fromNamespaceAndPath(ThutCore.MODID, "cave");
+    public static ResourceLocation FRUIT_TAG = ResourceLocation.fromNamespaceAndPath(ThutCore.MODID, "fruit");
+    public static ResourceLocation GROUND_TAG = ResourceLocation.fromNamespaceAndPath(ThutCore.MODID, "ground");
+    public static ResourceLocation INDUSTRIAL_TAG = ResourceLocation.fromNamespaceAndPath(ThutCore.MODID, "industrial");
+    public static ResourceLocation PLANTS_EDIBLE_TAG = ResourceLocation.fromNamespaceAndPath(ThutCore.MODID, "plants_edible");
+    public static ResourceLocation PLANTS_CUTABLE_TAG = ResourceLocation.fromNamespaceAndPath(ThutCore.MODID, "plants_cutable");
+    public static ResourceLocation ROCK_TAG = ResourceLocation.fromNamespaceAndPath(ThutCore.MODID, "rocks");
+    public static ResourceLocation SURFACE_TAG = ResourceLocation.fromNamespaceAndPath(ThutCore.MODID, "surface");
+    public static ResourceLocation TERRAIN_TAG = ResourceLocation.fromNamespaceAndPath(ThutCore.MODID, "terrain");
+    public static ResourceLocation WOOD_TAG = ResourceLocation.fromNamespaceAndPath(ThutCore.MODID, "wood");
 
-    public static ResourceLocation LEAVES = new ResourceLocation("minecraft:leaves");
-    public static ResourceLocation FLOWERS = new ResourceLocation("minecraft:small_flowers");
+    public static ResourceLocation LEAVES = ResourceLocation.parse("minecraft:leaves");
+    public static ResourceLocation FLOWERS = ResourceLocation.parse("minecraft:small_flowers");
 
-    public static final String tagKey = "structure_subbiomes";
+    public static final String tagKey = "thutcore:structure_subbiomes";
 
     public static void initStructMap()
     {
@@ -75,25 +75,14 @@ public class TerrainChecker
         return ItemList.is(TerrainChecker.INDUSTRIAL_TAG, state);
     }
 
-//    TODO: Find replacement
-//    private static boolean isPlant(final Material m)
-//    {
-//        return m == Material.PLANT || m == Material.REPLACEABLE_PLANT || m == Material.REPLACEABLE_WATER_PLANT
-//                || m == Material.WATER_PLANT;
-//    }
-
     public static boolean isEdiblePlant(final BlockState state)
     {
-        return ItemList.is(TerrainChecker.PLANTS_EDIBLE_TAG, state)
-                // TODO: Find replacement
-                /*|| ThutCore.getConfig().autoPopulateLists && TerrainChecker.isPlant(state.is(BlockTags.FLOWERS))*/;
+        return ItemList.is(TerrainChecker.PLANTS_EDIBLE_TAG, state) || state.is(BlockTags.FLOWERS);
     }
 
     public static boolean isCutablePlant(final BlockState state)
     {
-        return ItemList.is(TerrainChecker.PLANTS_CUTABLE_TAG, state) || ItemList.is(BlockTags.LEAVES.location(), state)
-                // TODO: Find replacement
-                /*|| ThutCore.getConfig().autoPopulateLists && TerrainChecker.isPlant(state.getMaterial())*/;
+        return ItemList.is(TerrainChecker.PLANTS_CUTABLE_TAG, state) || ItemList.is(BlockTags.LEAVES.location(), state);
     }
 
     public static boolean isRock(final BlockState state)

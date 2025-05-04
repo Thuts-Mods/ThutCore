@@ -1,15 +1,11 @@
 package thut.core.client.render.particle;
 
-import org.joml.Quaternionf;
-
 import com.mojang.blaze3d.systems.RenderSystem;
 import com.mojang.blaze3d.vertex.BufferBuilder;
 import com.mojang.blaze3d.vertex.DefaultVertexFormat;
 import com.mojang.blaze3d.vertex.Tesselator;
 import com.mojang.blaze3d.vertex.VertexConsumer;
 import com.mojang.blaze3d.vertex.VertexFormat;
-import com.mojang.math.Axis;
-
 import net.minecraft.client.Camera;
 import net.minecraft.client.multiplayer.ClientLevel;
 import net.minecraft.client.particle.Particle;
@@ -20,8 +16,8 @@ import net.minecraft.client.renderer.texture.TextureManager;
 import net.minecraft.util.Mth;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.phys.Vec3;
-import net.minecraftforge.api.distmarker.Dist;
-import net.minecraftforge.api.distmarker.OnlyIn;
+import net.neoforged.api.distmarker.Dist;
+import net.neoforged.api.distmarker.OnlyIn;
 import thut.api.maths.Vector3;
 import thut.api.maths.vecmath.Vec3f;
 import thut.api.particle.ParticleBase;
@@ -34,25 +30,18 @@ public class ParticleFactories
     public static class RenderType implements ParticleRenderType
     {
         @Override
-        public void begin(final BufferBuilder builder, final TextureManager textures)
+        public BufferBuilder begin(Tesselator tesselator, TextureManager textureManager)
         {
             RenderSystem.setShaderTexture(0, ParticleBase.TEXTUREMAP);
             RenderSystem.setShader(GameRenderer::getPositionColorTexLightmapShader);
-            builder.begin(VertexFormat.Mode.QUADS, DefaultVertexFormat.POSITION_COLOR_TEX_LIGHTMAP);
+            return tesselator.begin(VertexFormat.Mode.QUADS, DefaultVertexFormat.POSITION_COLOR_TEX_LIGHTMAP);
         }
-
-        @Override
-        public void end(final Tesselator tes)
-        {
-            tes.end();
-        }
-
     }
 
     public static class ThutParticle extends Particle
     {
         final ParticleBase particle;
-        final Level        world;
+        final Level world;
 
         protected ThutParticle(final Level worldIn, final ParticleBase particleIn)
         {
@@ -92,16 +81,6 @@ public class ParticleFactories
             final float y = (float) (Mth.lerp(partialTicks, this.yo, this.y) - vec3d.y());
             final float z = (float) (Mth.lerp(partialTicks, this.zo, this.z) - vec3d.z());
             final Vec3f source = new Vec3f(x, y, z);
-
-            Quaternionf quaternion;
-            if (this.roll == 0.0F) quaternion = renderInfo.rotation();
-            else
-            {
-                quaternion = new Quaternionf(renderInfo.rotation());
-                final float f3 = Mth.lerp(partialTicks, this.oRoll, this.roll);
-                quaternion.mul(Axis.ZP.rotation(f3));
-            }
-
             this.particle.renderParticle(buffer, renderInfo, partialTicks, source);
         }
 
@@ -118,13 +97,11 @@ public class ParticleFactories
                 this.remove();
             }
         }
-
     }
 
     public static final RenderType TYPE = new RenderType();
 
-    public static final ParticleProvider<ParticleBase> GENERICFACTORY = (type, world, x, y, z, vx, vy, vz) ->
-    {
+    public static final ParticleProvider<ParticleBase> GENERICFACTORY = (type, world, x, y, z, vx, vy, vz) -> {
         type = ThutParticles.clone(type);
         type.setVelocity(new Vector3().set(vx, vy, vz));
         type.setPosition(new Vector3().set(x, y, z));

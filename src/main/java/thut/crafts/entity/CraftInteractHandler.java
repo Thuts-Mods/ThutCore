@@ -45,11 +45,11 @@ public class CraftInteractHandler extends BlockEntityInteractHandler
             return InteractionResult.SUCCESS;
         else
         {
-            System.out.println(craft.yRot + " " + this.craft.getSeatCount());
+            System.out.println(craft.getYRot() + " " + this.craft.getSeatCount());
             for (int i = 0; i < this.craft.getSeatCount(); i++)
             {
                 final Seat seat = this.craft.getSeat(i);
-                if (!this.craft.level.isClientSide && seat.getEntityId().equals(Seat.BLANK))
+                if (!this.craft.level().isClientSide && seat.getEntityId().equals(Seat.BLANK))
                 {
                     this.craft.setSeatID(i, player.getUUID());
                     player.startRiding(this.craft);
@@ -102,7 +102,7 @@ public class CraftInteractHandler extends BlockEntityInteractHandler
     public InteractionResult processInitialInteract(final Player player, @Nullable final ItemStack stack,
             final InteractionHand hand)
     {
-        if (stack.getItem() == Items.BLAZE_ROD) if (!player.level.isClientSide)
+        if (stack.getItem() == Items.BLAZE_ROD) if (!player.level().isClientSide)
         {
             thut.lib.ChatHelper.sendSystemMessage(player, TComponent.translatable("msg.craft.killed"));
             this.craft.remove(RemovalReason.KILLED);

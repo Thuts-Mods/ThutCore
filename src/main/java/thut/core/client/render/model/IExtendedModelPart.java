@@ -7,27 +7,38 @@ import java.util.function.Predicate;
 
 import javax.annotation.Nullable;
 
+import org.joml.Vector3f;
+import org.joml.Vector4f;
+
 import com.google.common.collect.Sets;
 import com.mojang.blaze3d.vertex.PoseStack;
 
+import net.minecraft.client.Minecraft;
 import net.minecraft.client.renderer.MultiBufferSource;
 import net.minecraft.resources.ResourceLocation;
+import net.minecraft.world.entity.Entity;
 import thut.api.entity.IAnimated.IAnimationHolder;
 import thut.api.maths.Vector3;
 import thut.api.maths.Vector4;
 import thut.core.client.render.animation.AnimationXML.Mat;
 import thut.core.client.render.model.parts.Material;
 import thut.core.client.render.texturing.IPartTexturer;
+import thut.core.client.render.texturing.IRetexturableModel.Holder;
 
 public interface IExtendedModelPart extends IModelCustom
 {
-    public static void sort(final List<String> order, final Map<String, IExtendedModelPart> parts)
+    public static interface IPartRenderAdder
+    {
+        boolean shouldAddTo(IExtendedModelPart part);
+
+        void onRender(PoseStack mat, IExtendedModelPart part);
+    }
+
+    public static void sort(final List<IExtendedModelPart> order, final Map<String, IExtendedModelPart> parts)
     {
         order.clear();
-        order.addAll(parts.keySet());
-        order.sort((s1, s2) -> {
-            final IExtendedModelPart o1 = parts.get(s1);
-            final IExtendedModelPart o2 = parts.get(s2);
+        order.addAll(parts.values());
+        order.sort((o1, o2) -> {
             boolean transp1 = false;
             boolean transp2 = false;
             for (final Material m : o1.getMaterials())
@@ -49,9 +60,11 @@ public interface IExtendedModelPart extends IModelCustom
                 if (transp2) break;
             }
             if (transp1 != transp2) return transp1 ? 1 : -1;
-            return s1.compareTo(s2);
+            return o1.getName().compareTo(o2.getName());
         });
     }
+
+    void addPartRenderAdder(IPartRenderAdder adder);
 
     void addChild(IExtendedModelPart child);
 
@@ -82,9 +95,51 @@ public interface IExtendedModelPart extends IModelCustom
         for (final IExtendedModelPart o : this.getSubParts().values()) o.preProcess();
     }
 
-    default void sort(final List<String> order)
+    default void sort(final List<IExtendedModelPart> order)
     {
         IExtendedModelPart.sort(order, this.getSubParts());
+    }
+
+    default Entity convertToGlobal(PoseStack mat, Vector3f fill)
+    {
+        var holderSup = this.getAnimationHolder();
+        if (holderSup == null || holderSup.get() == null) return null;
+        if (holderSup.get().getContext() == null) return null;
+        if (!(holderSup.get().getContext().getContext() instanceof Entity e)) return null;
+
+        PoseStack mat2 = new PoseStack();
+        mat2.last().pose().set(mat.last().pose());
+        this.preRender(mat2);
+
+        Vector4f test = new Vector4f(0, 0, 0, 1);
+        test.mul(mat2.last().pose());
+
+        // Distance left/right
+        double dx = test.x() / 1;
+        // Distance up/down, this one is inverted it seems
+        double dy = -test.y() / 1;
+        // Distance centered
+        double dz = test.z() / 1;
+
+        var camera = Minecraft.getInstance().gameRenderer.getMainCamera();
+
+        // Directions of camera
+        var left = camera.getLeftVector();
+        var up = camera.getUpVector();
+        var fwd = camera.getLookVector();
+
+        var pos = camera.getPosition();
+
+        double x, y, z;
+        // Now transform back from camera coordinates
+        x = left.x() * dx + up.x() * dy + fwd.x() * dz;
+        y = left.y() * dx + up.y() * dy + fwd.y() * dz;
+        z = left.z() * dx + up.z() * dy + fwd.z() * dz;
+
+        // And subtract from camera location.
+        fill.set((float) (-x + pos.x()), (float) (-y + pos.y()), (float) (-z + pos.z()));
+
+        return e;
     }
 
     default void preRender(PoseStack mat)
@@ -111,7 +166,7 @@ public interface IExtendedModelPart extends IModelCustom
 
     <T extends IExtendedModelPart> Map<String, T> getSubParts();
 
-    List<String> getRenderOrder();
+    List<IExtendedModelPart> getRenderOrder();
 
     String getType();
 
@@ -173,9 +228,9 @@ public interface IExtendedModelPart extends IModelCustom
     default void setDefaultAngles(float rx, float ry, float rz)
     {}
 
-    void setAnimationHolder(IAnimationHolder holder);
+    Holder<IAnimationHolder> getAnimationHolder();
 
-    IAnimationHolder getAnimationHolder();
+    void setAnimationHolder(Holder<IAnimationHolder> input);
 
     void setParent(IExtendedModelPart parent);
 
@@ -186,6 +241,8 @@ public interface IExtendedModelPart extends IModelCustom
     void setPreRotations(Vector4 rotations);
 
     void setPreScale(Vector3 scale);
+
+    void setPostScale(Vector3 scale);
 
     void setPreTranslations(Vector3 translations);
 

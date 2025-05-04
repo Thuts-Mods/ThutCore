@@ -1,16 +1,12 @@
 package thut.core.common.commands;
 
-import java.lang.reflect.Field;
-import java.util.Arrays;
-import java.util.List;
-
 import com.google.common.collect.Lists;
 import com.mojang.brigadier.CommandDispatcher;
 import com.mojang.brigadier.arguments.StringArgumentType;
 import com.mojang.brigadier.builder.LiteralArgumentBuilder;
+import com.mojang.brigadier.exceptions.CommandSyntaxException;
+import com.mojang.brigadier.exceptions.SimpleCommandExceptionType;
 import com.mojang.brigadier.suggestion.SuggestionProvider;
-
-import net.minecraft.commands.CommandRuntimeException;
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.commands.Commands;
 import thut.api.util.PermNodes;
@@ -19,9 +15,14 @@ import thut.core.common.ThutCore;
 import thut.core.common.config.Config.ConfigData;
 import thut.lib.TComponent;
 
+import java.lang.reflect.Field;
+import java.util.Arrays;
+import java.util.List;
+
 public class CommandConfigs
 {
     protected static int execute(final ConfigData data, final CommandSourceStack source, final String field)
+            throws CommandSyntaxException
     {
         try
         {
@@ -31,17 +32,17 @@ public class CommandConfigs
         }
         catch (final Exception e)
         {
-            throw new CommandRuntimeException(TComponent.literal("Error with field name " + field));
+            throw new SimpleCommandExceptionType(TComponent.literal("Error with field name " + field)).create();
         }
 
         return 0;
     }
 
     protected static int execute(final ConfigData data, final CommandSourceStack source, final String field,
-            final String message)
+            final String message) throws CommandSyntaxException
     {
-        Field f = null;
-        Object value = null;
+        Field f;
+        Object value;
         try
         {
             f = data.getClass().getField(field);
@@ -50,95 +51,94 @@ public class CommandConfigs
         catch (final Exception e)
         {
             ThutCore.LOGGER.error(e);
-            throw new CommandRuntimeException(TComponent.literal("Error with field name " + field));
+            throw new SimpleCommandExceptionType(TComponent.literal("Error with field name " + field)).create();
         }
         final String[] args = message.split(" ");
-        String val = args[0];
-        if (val.equals("!set"))
+        StringBuilder val = new StringBuilder(args[0]);
+        switch (val.toString())
+        {
+        case "!set" ->
         {
             CommandConfigs.handleSet(data, args, value, f);
-            Object finalValue = value;
-            source.sendSuccess(() -> TComponent.translatable("thutcore.command.settings.array.set", field, finalValue), true);
+            source.sendSuccess(() -> TComponent.translatable("thutcore.command.settings.array.set", field, value),
+                    true);
             return 0;
         }
-
-        if (val.equals("!add"))
+        case "!add" ->
         {
             CommandConfigs.handleAdd(data, args, value, f);
-            Object finalValue1 = value;
-            source.sendSuccess(() -> TComponent.translatable("thutcore.command.settings.array.add", field, finalValue1), true);
+            source.sendSuccess(() -> TComponent.translatable("thutcore.command.settings.array.add", field, value),
+                    true);
             return 0;
         }
-
-        if (val.equals("!remove"))
+        case "!remove" ->
         {
             CommandConfigs.handleRemove(data, args, value, f);
-            Object finalValue2 = value;
-            source.sendSuccess(() -> TComponent.translatable("thutcore.command.settings.array.remove", field, finalValue2), true);
+            source.sendSuccess(() -> TComponent.translatable("thutcore.command.settings.array.remove", field, value),
+                    true);
             return 0;
         }
+        }
 
-        if (args.length > 1) for (int i = 1; i < args.length; i++) val = val + " " + args[i];
+        if (args.length > 1) for (int i = 1; i < args.length; i++) val.append(" ").append(args[i]);
         try
         {
-            data.updateField(f, val);
-            value = f.get(data);
+            Object finalValue3 = data.updateField(f, val.toString());
+            source.sendSuccess(() -> TComponent.translatable("thutcore.command.settings.set", field, finalValue3),
+                    true);
         }
         catch (final Exception e)
         {
-            throw new CommandRuntimeException(TComponent.literal("Error with setting field name " + field));
+            throw new SimpleCommandExceptionType(TComponent.literal("Error with setting field name " + field)).create();
         }
-        Object finalValue3 = value;
-        source.sendSuccess(() -> TComponent.translatable("thutcore.command.settings.set", field, finalValue3), true);
-
         return 0;
     }
 
     static void handleAdd(final ConfigData data, final String[] args, final Object o, final Field field)
-            throws CommandRuntimeException
+            throws CommandSyntaxException
     {
-        String value = args[1];
-        for (int i = 3; i < args.length; i++) value = value + " " + args[i];
-        Object toSet = null;
+        StringBuilder value = new StringBuilder(args[1]);
+        for (int i = 3; i < args.length; i++) value.append(" ").append(args[i]);
+        Object toSet;
         if (o instanceof String[])
         {
             final int len = ((String[]) o).length;
             toSet = Arrays.copyOf((String[]) o, len + 1);
-            ((String[]) toSet)[len] = value;
+            ((String[]) toSet)[len] = value.toString();
         }
         else if (o instanceof int[])
         {
             final int len = ((int[]) o).length;
             toSet = Arrays.copyOf((int[]) o, len + 1);
-            ((int[]) toSet)[len] = CommandConfigs.parseInt(value);
+            ((int[]) toSet)[len] = CommandConfigs.parseInt(value.toString());
         }
-        else throw new CommandRuntimeException(TComponent.literal("This can only by done for arrays."));
+        else throw new SimpleCommandExceptionType(TComponent.literal("This can only by done for arrays.")).create();
         try
         {
             data.updateField(field, toSet);
         }
         catch (final Exception e)
         {
-            throw new CommandRuntimeException(TComponent.literal("Error with setting field name " + field));
+            throw new SimpleCommandExceptionType(TComponent.literal("Error with setting field name " + field)).create();
         }
     }
 
     static void handleRemove(final ConfigData data, final String[] args, final Object o, final Field field)
-            throws CommandRuntimeException
+            throws CommandSyntaxException
     {
-        String value = args[1];
-        for (int i = 3; i < args.length; i++) value = value + " " + args[i];
+        StringBuilder value = new StringBuilder(args[1]);
+        for (int i = 3; i < args.length; i++) value.append(" ").append(args[i]);
         Object toSet = null;
         if (o instanceof String[] arr)
         {
             final List<String> values = Lists.newArrayList(arr);
-            final int index = values.indexOf(value);
+            final int index = values.indexOf(value.toString());
             if (index != -1) values.remove(index);
-            toSet = values.toArray(new String[values.size()]);
+            toSet = values.toArray(new String[0]);
         }
         else if (o instanceof int[] arr)
         {
-            final int arg = CommandConfigs.parseInt(value);
+            final int arg = CommandConfigs.parseInt(value.toString());
             final List<Integer> values = Lists.newArrayList();
             for (final int element : arr) values.add(element);
             final int index = values.indexOf(arg);
@@ -146,42 +146,42 @@ public class CommandConfigs
             toSet = arr = new int[values.size()];
             for (int i = 0; i < values.size(); i++) arr[i] = values.get(i);
         }
-        else throw new CommandRuntimeException(TComponent.literal("This can only by done for arrays."));
+        else throw new SimpleCommandExceptionType(TComponent.literal("This can only by done for arrays.")).create();
         try
         {
             data.updateField(field, toSet);
         }
         catch (final Exception e)
         {
-            throw new CommandRuntimeException(TComponent.literal("Error with setting field name " + field));
+            throw new SimpleCommandExceptionType(TComponent.literal("Error with setting field name " + field)).create();
         }
     }
 
     static void handleSet(final ConfigData data, final String[] args, final Object o, final Field field)
-            throws CommandRuntimeException
+            throws CommandSyntaxException
     {
         final int num = CommandConfigs.parseInt(args[1]);
-        String value = args[2];
-        for (int i = 4; i < args.length; i++) value = value + " " + args[i];
+        StringBuilder value = new StringBuilder(args[2]);
+        for (int i = 4; i < args.length; i++) value.append(" ").append(args[i]);
         Object toSet = null;
         if (o instanceof String[] arr)
         {
-            arr[num] = value;
+            arr[num] = value.toString();
             toSet = arr.clone();
         }
         else if (o instanceof int[] arr)
         {
-            arr[num] = CommandConfigs.parseInt(value);
+            arr[num] = CommandConfigs.parseInt(value.toString());
             toSet = arr.clone();
         }
-        else throw new CommandRuntimeException(TComponent.literal("This can only by done for arrays."));
+        else throw new SimpleCommandExceptionType(TComponent.literal("This can only by done for arrays.")).create();
         try
         {
             data.updateField(field, toSet);
         }
         catch (final Exception e)
         {
-            throw new CommandRuntimeException(TComponent.literal("Error with setting field name " + field));
+            throw new SimpleCommandExceptionType(TComponent.literal("Error with setting field name " + field)).create();
         }
     }
 
@@ -194,7 +194,7 @@ public class CommandConfigs
         return (ctx, sb) -> net.minecraft.commands.SharedSuggestionProvider.suggest(values, sb);
     }
 
-    public static int parseInt(final String input) throws CommandRuntimeException
+    public static int parseInt(final String input) throws CommandSyntaxException
     {
         try
         {
@@ -202,8 +202,8 @@ public class CommandConfigs
         }
         catch (final NumberFormatException var2)
         {
-            throw new CommandRuntimeException(TComponent.translatable("commands.generic.num.invalid", new Object[]
-            { input }));
+            throw new SimpleCommandExceptionType(
+                    TComponent.translatable("commands.generic.num.invalid", new Object[] { input })).create();
         }
     }
 
@@ -219,20 +219,20 @@ public class CommandConfigs
         LiteralArgumentBuilder<CommandSourceStack> command = Commands.literal(name)
                 .requires(cs -> CommandTools.hasPerm(cs, perm1))
                 .then(Commands.argument("option", StringArgumentType.string())
-                        .suggests(CommandConfigs.MakeProvider(data)).executes(ctx -> CommandConfigs.execute(data,
-                                ctx.getSource(), StringArgumentType.getString(ctx, "option"))));
+                        .suggests(CommandConfigs.MakeProvider(data)).executes(
+                                ctx -> CommandConfigs.execute(data, ctx.getSource(),
+                                        StringArgumentType.getString(ctx, "option"))));
         commandDispatcher.register(command);
 
         final String perm2 = "command." + name + ".set";
         PermNodes.registerBooleanNode(ThutCore.MODID, perm2, DefaultPermissionLevel.OP,
                 "Is the player allowed to set configs for " + data.MODID);
 
-        command = Commands.literal(name)
-                .then(Commands.argument("option", StringArgumentType.string())
-                        .suggests(CommandConfigs.MakeProvider(data))
-                        .then(Commands.argument("value", StringArgumentType.greedyString())
-                                .requires(cs -> CommandTools.hasPerm(cs, perm2))
-                                .executes(ctx -> CommandConfigs.execute(data, ctx.getSource(),
+        command = Commands.literal(name).then(Commands.argument("option", StringArgumentType.string())
+                .suggests(CommandConfigs.MakeProvider(data))
+                .then(Commands.argument("value", StringArgumentType.greedyString())
+                        .requires(cs -> CommandTools.hasPerm(cs, perm2)).executes(
+                                ctx -> CommandConfigs.execute(data, ctx.getSource(),
                                         StringArgumentType.getString(ctx, "option"),
                                         StringArgumentType.getString(ctx, "value")))));
         commandDispatcher.register(command);

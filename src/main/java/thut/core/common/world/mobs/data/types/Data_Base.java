@@ -1,23 +1,71 @@
 package thut.core.common.world.mobs.data.types;
 
 import io.netty.buffer.ByteBuf;
+import net.minecraft.core.HolderLookup.Provider;
 import thut.api.world.mobs.data.Data;
+import thut.api.world.mobs.data.DataSync;
+import thut.core.common.ThutCore;
 
 public abstract class Data_Base<T> implements Data<T>
 {
     private int ID = -1;
     private int UID = -1;
     private boolean dirty = false;
-    private T lastSent = null;
+    private String tag;
+    private final String name;
+    protected T value;
 
     private boolean realtime = false;
+    protected Provider provider = null;
+    private DataSync sync;
+
+    public Data_Base(String name)
+    {
+        this.name = name;
+        this.provider = ThutCore.proxy.getRegistries();
+    }
+
+    @Override
+    public void setSync(DataSync sync)
+    {
+        this.sync = sync;
+    }
+
+    @Override
+    @SuppressWarnings("unchecked")
+    public void setRaw(Object value)
+    {
+        this.value = (T) value;
+    }
+
+    public String getTag()
+    {
+        return tag;
+    }
+
+    @Override
+    public Data<T> setTag(String tag)
+    {
+        this.tag = tag;
+        return this;
+    }
+
+    @Override
+    public String getName()
+    {
+        return name;
+    }
+
+    @Override
+    public void setHolderLookup(Provider provider)
+    {
+        this.provider = provider;
+    }
 
     @Override
     public boolean dirty()
     {
-        if (this.dirty) return true;
-        final T value = this.get();
-        return this.isDifferent(this.lastSent, value);
+        return this.dirty;
     }
 
     @Override
@@ -32,16 +80,6 @@ public abstract class Data_Base<T> implements Data<T>
         return this.UID;
     }
 
-    protected void initLast(T last)
-    {
-        this.lastSent = last;
-    }
-
-    protected boolean isDifferent(T last, T value)
-    {
-        return last != null ? !last.equals(value) : value != null;
-    }
-
     @Override
     public void read(ByteBuf buf)
     {
@@ -51,8 +89,8 @@ public abstract class Data_Base<T> implements Data<T>
     @Override
     public void setDirty(boolean dirty)
     {
-        if (!dirty) this.lastSent = this.get();
-        else this.dirty = dirty;
+        this.dirty = dirty;
+        if (this.isRealtime() && dirty) sync.setSyncNow();
     }
 
     @Override
@@ -71,7 +109,6 @@ public abstract class Data_Base<T> implements Data<T>
     public void write(ByteBuf buf)
     {
         this.dirty = false;
-        this.lastSent = this.get();
         buf.writeInt(this.ID);
     }
 

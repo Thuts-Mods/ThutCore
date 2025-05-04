@@ -23,7 +23,7 @@ public class CraftStickApplier implements ICustomStickHandler
     @Override
     public void apply(ServerPlayer player, ServerLevel level, ItemStack held, BlockPos min, BlockPos max)
     {
-        final AABB box = new AABB(min, max);
+        final AABB box = AABB.encapsulatingFullBlocks(min, max);
         min = new BlockPos((int) box.minX, (int) box.minY, (int) box.minZ);
         max = new BlockPos((int) box.maxX, (int) box.maxY, (int) box.maxZ);
         final BlockPos mid = min;
@@ -38,7 +38,7 @@ public class CraftStickApplier implements ICustomStickHandler
     @Override
     public boolean checkValid(ServerPlayer player, Level level, ItemStack held, BlockPos min, BlockPos max)
     {
-        final AABB box = new AABB(min, max);
+        final AABB box = AABB.encapsulatingFullBlocks(min, max);
         min = new BlockPos((int) box.minX, (int) box.minY, (int) box.minZ);
         max = new BlockPos((int) box.maxX, (int) box.maxY, (int) box.maxZ);
         final BlockPos mid = min;

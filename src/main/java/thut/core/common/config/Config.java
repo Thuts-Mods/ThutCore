@@ -1,40 +1,32 @@
 package thut.core.common.config;
 
+import com.electronwill.nightconfig.core.file.CommentedFileConfig;
+import com.google.common.collect.Lists;
+import com.google.common.collect.Maps;
+import net.neoforged.fml.ModContainer;
+import net.neoforged.fml.ModLoadingContext;
+import net.neoforged.fml.config.ModConfig;
+import net.neoforged.fml.event.config.ModConfigEvent;
+import net.neoforged.fml.event.config.ModConfigEvent.Reloading;
+import net.neoforged.fml.loading.FMLPaths;
+import net.neoforged.neoforge.common.ModConfigSpec;
+import net.neoforged.neoforge.common.ModConfigSpec.Builder;
+import net.neoforged.neoforge.common.ModConfigSpec.ConfigValue;
+import thut.core.common.ThutCore;
+
 import java.io.File;
 import java.lang.reflect.Field;
 import java.lang.reflect.Modifier;
 import java.nio.file.Path;
-import java.util.Collections;
+import java.util.Arrays;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 import java.util.function.Supplier;
-
-import com.electronwill.nightconfig.core.CommentedConfig;
-import com.electronwill.nightconfig.core.file.CommentedFileConfig;
-import com.electronwill.nightconfig.core.io.WritingMode;
-import com.google.common.collect.Lists;
-import com.google.common.collect.Maps;
-import com.google.common.collect.Sets;
-
-import net.minecraftforge.common.ForgeConfigSpec;
-import net.minecraftforge.common.ForgeConfigSpec.Builder;
-import net.minecraftforge.common.ForgeConfigSpec.ConfigValue;
-import net.minecraftforge.eventbus.api.IEventBus;
-import net.minecraftforge.eventbus.api.SubscribeEvent;
-import net.minecraftforge.fml.ModLoadingContext;
-import net.minecraftforge.fml.config.ModConfig;
-import net.minecraftforge.fml.config.ModConfig.Type;
-import net.minecraftforge.fml.event.config.ModConfigEvent;
-import net.minecraftforge.fml.event.config.ModConfigEvent.Reloading;
-import net.minecraftforge.fml.javafmlmod.FMLJavaModLoadingContext;
-import net.minecraftforge.fml.loading.FMLPaths;
-import thut.core.common.ThutCore;
 
 public class Config
 {
-    public static abstract class ConfigData implements IConfigHolder
+    public static abstract class ConfigData
     {
         public final String MODID;
 
@@ -55,8 +47,7 @@ public class Config
             this.MODID = MODID;
         }
 
-        @Override
-        public void init(final Type type, final Field field, final ConfigValue<?> val)
+        public void init(final ModConfig.Type type, final Field field, final ConfigValue<?> val)
         {
             switch (type)
             {
@@ -74,27 +65,23 @@ public class Config
             }
         }
 
-        @SubscribeEvent
         public void onFileChange(final Reloading configEvent)
         {
             ThutCore.LOGGER.debug("{} config belongs to us!", configEvent.getConfig().getFileName());
-            if (configEvent.getConfig().getConfigData() instanceof CommentedFileConfig)
-                ((CommentedFileConfig) configEvent.getConfig().getConfigData()).load();
+            if (configEvent.getConfig().getLoadedConfig().config() instanceof CommentedFileConfig conf) conf.load();
             this.read(configEvent.getConfig());
         }
 
-        @SubscribeEvent
         public void onLoad(final ModConfigEvent.Loading configEvent)
         {
             ThutCore.LOGGER.info("Loaded {} config file {}", this.MODID, configEvent.getConfig().getFileName());
             this.read(configEvent.getConfig());
         }
 
-        @Override
         public void read(final ModConfig modConfig)
         {
             Map<Field, Supplier<?>> values = Maps.newHashMap();
-            final Type type = modConfig.getType();
+            final ModConfig.Type type = modConfig.getType();
             switch (type)
             {
             case CLIENT:
@@ -119,56 +106,62 @@ public class Config
         private boolean read(final Map<Field, Supplier<?>> values)
         {
             boolean changed = false;
-            for (final Field f : values.keySet()) try
-            {
-                f.setAccessible(true);
-                final Object ours = f.get(this);
-                final Object o = values.get(f).get();
-                if (ours.equals(o)) continue;
-                ThutCore.LOGGER.info("Set {} to {}", f.getName(), o);
-                f.set(this, o);
-                changed = true;
-            }
-            catch (final Exception e)
-            {
-                ThutCore.LOGGER.error("Error updating config value for " + f);
-            }
+            for (final Field f : values.keySet())
+                try
+                {
+                    f.setAccessible(true);
+                    final Object ours = f.get(this);
+                    final Object o = values.get(f).get();
+                    if (ours.equals(o)) continue;
+                    ThutCore.LOGGER.info("Set {} to {}", f.getName(), o);
+                    f.set(this, o);
+                    changed = true;
+                }
+                catch (final Exception e)
+                {
+                    ThutCore.LOGGER.error("Error updating config value for " + f);
+                }
             return changed;
         }
 
-        public void updateField(final Field field, final Object update) throws Exception
+        public Object updateField(final Field field, final Object update) throws Exception
         {
+            Object res = null;
             field.getAnnotation(Configure.class);
             if (field.getType() == Long.TYPE || field.getType() == Long.class)
-                field.set(this, Long.parseLong((String) update));
+                field.set(this, res = Long.parseLong((String) update));
             else if (field.getType() == String.class) field.set(this, update);
             else if (field.getType() == Integer.TYPE || field.getType() == Integer.class)
-                field.set(this, Integer.parseInt((String) update));
+                field.set(this, res = Integer.parseInt((String) update));
             else if (field.getType() == Float.TYPE || field.getType() == Float.class)
-                field.set(this, Float.parseFloat((String) update));
+                field.set(this, res = Float.parseFloat((String) update));
             else if (field.getType() == Double.TYPE || field.getType() == Double.class)
-                field.set(this, Double.parseDouble((String) update));
+                field.set(this, res = Double.parseDouble((String) update));
             else if (field.getType() == Boolean.TYPE || field.getType() == Boolean.class)
-                field.set(this, Boolean.parseBoolean((String) update));
+                field.set(this, res = Boolean.parseBoolean((String) update));
             else
             {
                 final Object o = field.get(this);
-                if (o instanceof String[])
+                switch (o)
+                {
+                case String[] ignored ->
                 {
                     final String[] vars = update instanceof String s ? s.split("``") : (String[]) update;
-                    field.set(this, vars);
+                    field.set(this, res = vars);
                 }
-                else if (o instanceof List<?> && !((List<?>) o).isEmpty() && ((List<?>) o).get(0) instanceof String)
+                case List<?> objects when !objects.isEmpty() && objects.getFirst() instanceof String ->
                 {
                     @SuppressWarnings("unchecked")
                     final List<String> list = (List<String>) o;
                     final String[] vars = update instanceof String s ? s.split("``") : (String[]) update;
                     list.clear();
-                    for (final String s : vars) list.add(s);
+                    list.addAll(Arrays.asList(vars));
+                    res = list;
                 }
-                else if (o instanceof int[])
+                case int[] ignored ->
                 {
-                    final String[] vars = update instanceof String s ? s.split("``")
+                    final String[] vars = update instanceof String s
+                            ? s.split("``")
                             : update instanceof String[] s ? s : null;
                     int[] toSet = null;
                     if (vars == null) toSet = (int[]) update;
@@ -177,15 +170,19 @@ public class Config
                         toSet = new int[vars.length];
                         for (int i = 0; i < vars.length; i++) toSet[i] = Integer.parseInt(vars[i].trim());
                     }
-                    field.set(this, toSet);
+                    field.set(this, res = toSet);
                 }
-                else System.err.println("Unknown Type " + field.getType() + " " + field.getName() + " " + o.getClass());
+                case null, default -> System.err.println(
+                        "Unknown Type " + field.getType() + " " + field.getName() + " " + o.getClass());
+                }
             }
             this.onUpdated();
-            this.write();
+            if (res != null) this.write();
+            return res;
         }
 
-        @Override
+        protected abstract void onUpdated();
+
         public void write()
         {
             this.write(this.CLIENT_CONFIG, this.clientValues);
@@ -193,87 +190,32 @@ public class Config
             this.write(this.SERVER_CONFIG, this.serverValues);
         }
 
-        private boolean write(final ModConfig config, final Map<Field, ConfigValue<?>> values)
+        private void write(final ModConfig config, final Map<Field, ConfigValue<?>> values)
         {
-            boolean ret = false;
-            for (final Field f : values.keySet()) try
-            {
-                final Object ours = f.get(this);
-                final Object val = values.get(f).get();
-                if (ours.equals(val)) continue;
-                config.getConfigData().set(values.get(f).getPath(), ours);
-                ret = true;
-            }
-            catch (final Exception e)
-            {
-                ThutCore.LOGGER.error("Error saving config value for " + f, e);
-            }
-            return ret;
-        }
-
-        private void addFromConfig(CommentedConfig config, Map<Field, Supplier<?>> values, Map<String, Field> fields,
-                Set<CommentedConfig> checked)
-        {
-            config.entrySet().forEach(e -> {
-                String name = e.getKey();
-                if (fields.containsKey(name))
+            for (final Field f : values.keySet())
+                try
                 {
-                    try
-                    {
-                        values.put(fields.get(name), () -> e.getValue());
-                    }
-                    catch (Exception e1)
-                    {
-                        e1.printStackTrace();
-                    }
+                    final Object ours = f.get(this);
+                    final Object val = values.get(f).get();
+                    if (ours.equals(val)) continue;
+                    config.getLoadedConfig().config().set(values.get(f).getPath(), ours);
                 }
-                // checked.add(c) prevents recursion when a config contains its
-                // parent
-                else if (e.getValue() instanceof CommentedConfig c && checked.add(c))
+                catch (final Exception e)
                 {
-                    addFromConfig(c, values, fields, checked);
+                    ThutCore.LOGGER.error("Error saving config value for {}", f, e);
                 }
-            });
-        }
-
-        @Override
-        public void initRead(Type type, CommentedFileConfig config)
-        {
-            Map<Field, Supplier<?>> values = Maps.newHashMap();
-            Map<String, Field> fields = Maps.newHashMap();
-            Set<CommentedConfig> checked = Sets.newHashSet(config);
-            for (Field f : this.getClass().getDeclaredFields())
+            try
             {
-                if (Modifier.isStatic(f.getModifiers())) continue;
-                fields.put(f.getName(), f);
+                if (config.getSpec() instanceof ModConfigSpec conf) conf.save();
             }
-            addFromConfig(config, values, fields, checked);
-            this.read(values);
+            catch (Exception e)
+            {
+                ThutCore.LOGGER.error("Error saving config for {}", config, e);
+            }
         }
     }
 
-    public static interface IConfigHolder
-    {
-        void init(Type type, Field field, ConfigValue<?> val);
-
-        /**
-         * This is called whenever the values in this config may have changed.
-         */
-        void onUpdated();
-
-        /**
-         * This is called when this config is read.
-         *
-         * @param spec
-         */
-        void read(ModConfig spec);
-
-        void write();
-
-        void initRead(Type type, CommentedFileConfig config);
-    }
-
-    private static ForgeConfigSpec[] initConfigSpecs(final IConfigHolder holder)
+    private static ModConfigSpec[] initConfigSpecs(final ConfigData holder)
     {
         final Builder COMMON_BUILDER = new Builder();
         final Builder CLIENT_BUILDER = new Builder();
@@ -313,20 +255,19 @@ public class Config
             if (diff == 0) diff = o1.getName().compareTo(o2.getName());
             return diff;
         };
-        Collections.sort(commonList, comp);
-        Collections.sort(clientList, comp);
-        Collections.sort(serverList, comp);
+        commonList.sort(comp);
+        clientList.sort(comp);
+        serverList.sort(comp);
 
-        Config.build(COMMON_BUILDER, commonList, holder, Type.COMMON);
-        Config.build(SERVER_BUILDER, serverList, holder, Type.SERVER);
-        Config.build(CLIENT_BUILDER, clientList, holder, Type.CLIENT);
+        Config.build(COMMON_BUILDER, commonList, holder, ModConfig.Type.COMMON);
+        Config.build(SERVER_BUILDER, serverList, holder, ModConfig.Type.SERVER);
+        Config.build(CLIENT_BUILDER, clientList, holder, ModConfig.Type.CLIENT);
 
-        final ForgeConfigSpec COMMON_CONFIG_SPEC = commonList.isEmpty() ? null : COMMON_BUILDER.pop().build();
-        final ForgeConfigSpec CLIENT_CONFIG_SPEC = clientList.isEmpty() ? null : CLIENT_BUILDER.pop().build();
-        final ForgeConfigSpec SERVER_CONFIG_SPEC = serverList.isEmpty() ? null : SERVER_BUILDER.pop().build();
+        final ModConfigSpec COMMON_CONFIG_SPEC = commonList.isEmpty() ? null : COMMON_BUILDER.pop().build();
+        final ModConfigSpec CLIENT_CONFIG_SPEC = clientList.isEmpty() ? null : CLIENT_BUILDER.pop().build();
+        final ModConfigSpec SERVER_CONFIG_SPEC = serverList.isEmpty() ? null : SERVER_BUILDER.pop().build();
 
-        return new ForgeConfigSpec[]
-        { COMMON_CONFIG_SPEC, CLIENT_CONFIG_SPEC, SERVER_CONFIG_SPEC };
+        return new ModConfigSpec[] { COMMON_CONFIG_SPEC, CLIENT_CONFIG_SPEC, SERVER_CONFIG_SPEC };
     }
 
     private static void addComment(final Builder builder, final String input)
@@ -343,8 +284,8 @@ public class Config
         else builder.comment(" " + input);
     }
 
-    private static void build(final Builder builder, final List<Field> fields, final IConfigHolder holder,
-            final Type type)
+    private static void build(final Builder builder, final List<Field> fields, final ConfigData holder,
+            final ModConfig.Type type)
     {
 
         final Map<String, String> cat_comments = Maps.newHashMap();
@@ -369,41 +310,32 @@ public class Config
             }
         }
         String cat = "";
-        for (final Field field : fields) try
-        {
-            if (Modifier.isStatic(field.getModifiers())) continue;
-            final Configure conf = field.getAnnotation(Configure.class);
-            if (!cat.equals(conf.category()))
+        for (final Field field : fields)
+            try
             {
-                // Empty the first time, otherwise we pop off
-                if (!cat.isEmpty()) builder.pop();
-                cat = conf.category();
-                // Push the category
-                builder.push(cat);
-                builder.translation(ModLoadingContext.get().getActiveNamespace() + ".config." + cat);
-                if (cat_comments.containsKey(cat)) Config.addComment(builder, cat_comments.get(cat));
+                if (Modifier.isStatic(field.getModifiers())) continue;
+                final Configure conf = field.getAnnotation(Configure.class);
+                if (!cat.equals(conf.category()))
+                {
+                    // Empty the first time, otherwise we pop off
+                    if (!cat.isEmpty()) builder.pop();
+                    cat = conf.category();
+                    // Push the category
+                    builder.push(cat);
+                    builder.translation(ModLoadingContext.get().getActiveNamespace() + ".config." + cat);
+                    if (cat_comments.containsKey(cat)) Config.addComment(builder, cat_comments.get(cat));
+                }
+                if (!conf.comment().isEmpty()) Config.addComment(builder, conf.comment());
+                else Config.addComment(builder, "sets " + field.getName());
+                builder.translation(
+                        ModLoadingContext.get().getActiveNamespace() + ".config." + field.getName() + ".tooltip");
+                final Object o = field.get(holder);
+                holder.init(type, field, builder.define(field.getName(), o));
             }
-            if (!conf.comment().isEmpty()) Config.addComment(builder, conf.comment());
-            else Config.addComment(builder, "sets " + field.getName());
-            builder.translation(
-                    ModLoadingContext.get().getActiveNamespace() + ".config." + field.getName() + ".tooltip");
-            final Object o = field.get(holder);
-            holder.init(type, field, builder.define(field.getName(), o));
-        }
-        catch (final Exception e)
-        {
-            ThutCore.LOGGER.error("Error getting field " + field, e);
-        }
-    }
-
-    private static void loadConfig(ModConfig.Type type, IConfigHolder holder, ForgeConfigSpec spec, Path path)
-    {
-        ThutCore.LOGGER.debug("Loading config file {}", path);
-        final CommentedFileConfig configData = CommentedFileConfig.builder(path).sync().autosave()
-                .writingMode(WritingMode.REPLACE).build();
-        configData.load();
-        spec.setConfig(configData);
-        holder.initRead(type, configData);
+            catch (final Exception e)
+            {
+                ThutCore.LOGGER.error("Error getting field " + field, e);
+            }
     }
 
     /**
@@ -411,15 +343,13 @@ public class Config
      * @param subfolder the folder that this config is in.
      * @param prefix    prefix for these config files.
      */
-    public static void setupConfigs(final IConfigHolder holder, final String subfolder, final String prefix)
+    public static void setupConfigs(ModContainer container, final ConfigData holder, final String subfolder,
+            final String prefix)
     {
-        final IEventBus modEventBus = FMLJavaModLoadingContext.get().getModEventBus();
-        modEventBus.register(holder);
-
-        ForgeConfigSpec COMMON_CONFIG_SPEC;
-        ForgeConfigSpec CLIENT_CONFIG_SPEC;
-        ForgeConfigSpec SERVER_CONFIG__SPEC;
-        final ForgeConfigSpec[] specs = Config.initConfigSpecs(holder);
+        ModConfigSpec COMMON_CONFIG_SPEC;
+        ModConfigSpec CLIENT_CONFIG_SPEC;
+        ModConfigSpec SERVER_CONFIG__SPEC;
+        final ModConfigSpec[] specs = Config.initConfigSpecs(holder);
         COMMON_CONFIG_SPEC = specs[0];
         CLIENT_CONFIG_SPEC = specs[1];
         SERVER_CONFIG__SPEC = specs[2];
@@ -429,27 +359,21 @@ public class Config
         // Server is saved to the world itself, so it doesn't go with rest
         final File serverfile = new File(prefix + "-server.toml");
 
-        // Setup paths for each one.
-        final Path common = FMLPaths.CONFIGDIR.get().resolve(subfolder).resolve(prefix + "-common.toml");
-        final Path client = FMLPaths.CONFIGDIR.get().resolve(subfolder).resolve(prefix + "-client.toml");
-        // Server is saved to the world itself, so it doesn't go with rest
-        final Path server = FMLPaths.CONFIGDIR.get().resolve(prefix + "-server.toml");
-
+        // Setup path for testing if dir is needed
+        Path common = FMLPaths.CONFIGDIR.get().resolve(subfolder).resolve(prefix + "-common.toml");
         // Mk dirs as needed
         if (COMMON_CONFIG_SPEC != null || CLIENT_CONFIG_SPEC != null) common.toFile().getParentFile().mkdirs();
 
         // Register the configs
         if (COMMON_CONFIG_SPEC != null)
-            ModLoadingContext.get().registerConfig(ModConfig.Type.COMMON, COMMON_CONFIG_SPEC, commonfile.toString());
+            container.registerConfig(ModConfig.Type.COMMON, COMMON_CONFIG_SPEC, commonfile.toString());
         if (CLIENT_CONFIG_SPEC != null)
-            ModLoadingContext.get().registerConfig(ModConfig.Type.CLIENT, CLIENT_CONFIG_SPEC, clientfile.toString());
+            container.registerConfig(ModConfig.Type.CLIENT, CLIENT_CONFIG_SPEC, clientfile.toString());
         if (SERVER_CONFIG__SPEC != null)
-            ModLoadingContext.get().registerConfig(ModConfig.Type.SERVER, SERVER_CONFIG__SPEC, serverfile.toString());
+            container.registerConfig(ModConfig.Type.SERVER, SERVER_CONFIG__SPEC, serverfile.toString());
 
-        // Load configs
-        if (COMMON_CONFIG_SPEC != null) Config.loadConfig(ModConfig.Type.COMMON, holder, COMMON_CONFIG_SPEC, common);
-        if (CLIENT_CONFIG_SPEC != null) Config.loadConfig(ModConfig.Type.CLIENT, holder, CLIENT_CONFIG_SPEC, client);
-        if (SERVER_CONFIG__SPEC != null) Config.loadConfig(ModConfig.Type.SERVER, holder, SERVER_CONFIG__SPEC, server);
+        container.getEventBus().addListener(holder::onFileChange);
+        container.getEventBus().addListener(holder::onLoad);
 
         // This ensures the values are initialized, this onUpdated is never
         // called unless the config is different

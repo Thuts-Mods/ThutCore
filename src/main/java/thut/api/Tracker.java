@@ -5,24 +5,31 @@ import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.nio.file.Path;
+import java.util.HashMap;
+import java.util.Map;
 
 import it.unimi.dsi.fastutil.objects.Object2IntArrayMap;
 import it.unimi.dsi.fastutil.objects.Object2LongArrayMap;
 import net.minecraft.nbt.CompoundTag;
+import net.minecraft.nbt.NbtAccounter;
 import net.minecraft.nbt.NbtIo;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
+import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.storage.LevelResource;
-import net.minecraftforge.common.MinecraftForge;
-import net.minecraftforge.event.TickEvent.ClientTickEvent;
-import net.minecraftforge.event.TickEvent.Phase;
-import net.minecraftforge.event.TickEvent.ServerTickEvent;
-import net.minecraftforge.event.level.LevelEvent;
-import net.minecraftforge.event.server.ServerStartedEvent;
-import net.minecraftforge.server.ServerLifecycleHooks;
+import net.neoforged.neoforge.client.event.ClientTickEvent;
+import net.neoforged.neoforge.event.level.LevelEvent;
+import net.neoforged.neoforge.event.server.ServerStartedEvent;
+import net.neoforged.neoforge.event.tick.ServerTickEvent;
+import net.neoforged.neoforge.server.ServerLifecycleHooks;
 import thut.core.common.ThutCore;
 
+/**
+ * Time tick tracker, Used for a global timer which does not reset with world
+ * time, etc.
+ *
+ */
 public class Tracker
 {
     private static Tracker INSTANCE = new Tracker();
@@ -34,10 +41,17 @@ public class Tracker
 
     public static void init()
     {
-        MinecraftForge.EVENT_BUS.addListener(Tracker::onServerTick);
-        MinecraftForge.EVENT_BUS.addListener(Tracker::onClientTick);
-        MinecraftForge.EVENT_BUS.addListener(Tracker::onServerStart);
-        MinecraftForge.EVENT_BUS.addListener(Tracker::onWorldSave);
+        ThutCore.FORGE_BUS.addListener(Tracker::onServerTick);
+        ThutCore.FORGE_BUS.addListener(Tracker::onClientTick);
+        ThutCore.FORGE_BUS.addListener(Tracker::onServerStart);
+        ThutCore.FORGE_BUS.addListener(Tracker::onWorldSave);
+    }
+
+    public static interface UpdateHandler
+    {
+        String getKey();
+
+        void read(CompoundTag nbt, ServerPlayer player);
     }
 
     private static long start = System.nanoTime();
@@ -45,6 +59,7 @@ public class Tracker
     private static long dt = 0;
     private static Object2LongArrayMap<String> taskCounts = new Object2LongArrayMap<>();
     private static Object2IntArrayMap<String> taskNs = new Object2IntArrayMap<>();
+    public static Map<String, UpdateHandler> HANDLERS = new HashMap<>();
 
     public static void timerStart()
     {
@@ -96,17 +111,17 @@ public class Tracker
     }
 
     // Increment time
-    private static void onServerTick(final ServerTickEvent event)
+    private static void onServerTick(final ServerTickEvent.Post event)
     {
-        if (event.phase == Phase.END) Tracker.instance().time++;
+        Tracker.instance().time++;
     }
 
-    private static void onClientTick(final ClientTickEvent event)
+    private static void onClientTick(final ClientTickEvent.Post event)
     {
         // Force this to also increment client side while on a dedicated server.
         // This allows using the ticker for ensuring animations, etc keep
         // running as well.
-        if (ServerLifecycleHooks.getCurrentServer() == null && event.phase == Phase.END) Tracker.instance().time++;
+        if (ServerLifecycleHooks.getCurrentServer() == null) Tracker.instance().time++;
     }
 
     // Load the time and set it.
@@ -126,10 +141,10 @@ public class Tracker
         try
         {
             final FileInputStream fileinputstream = new FileInputStream(file);
-            final CompoundTag CompoundNBT = NbtIo.readCompressed(fileinputstream);
+            final CompoundTag CompoundNBT = NbtIo.readCompressed(fileinputstream, NbtAccounter.create(104857600L));
             fileinputstream.close();
             final CompoundTag tag = CompoundNBT.getCompound("Data");
-            Tracker.read(tag);
+            Tracker.read(tag, null);
         }
         catch (final IOException e)
         {
@@ -165,9 +180,16 @@ public class Tracker
         }
     }
 
-    public static void read(final CompoundTag nbt)
+    public static void read(final CompoundTag nbt, ServerPlayer player)
     {
-        Tracker.instance().time = nbt.getLong("tick_timer");
+        if (nbt.contains("key"))
+        {
+            String key = nbt.getString("key");
+            CompoundTag tag = nbt.getCompound("tag");
+            var handler = HANDLERS.get(key);
+            if (handler != null) handler.read(tag, player);
+        }
+        else if (player == null) Tracker.instance().time = nbt.getLong("tick_timer");
     }
 
     public static CompoundTag write()

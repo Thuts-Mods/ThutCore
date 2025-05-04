@@ -1,5 +1,6 @@
 package thut.core.common.genetics.genes;
 
+import net.minecraft.core.HolderLookup.Provider;
 import net.minecraft.nbt.CompoundTag;
 import thut.api.entity.genetics.Gene;
 
@@ -14,15 +15,17 @@ public abstract class GeneFloat implements Gene<Float>
     }
 
     @Override
-    public void load(final CompoundTag tag)
+    public void load(Provider provider, final CompoundTag tag)
     {
         this.value = tag.getFloat("V");
+        if (this.value.isNaN()) this.value = 0f;
     }
 
     @Override
-    public CompoundTag save()
+    public CompoundTag save(Provider provider)
     {
         final CompoundTag tag = new CompoundTag();
+        if (this.value.isNaN()) this.value = 0f;
         tag.putFloat("V", this.value);
         return tag;
     }
