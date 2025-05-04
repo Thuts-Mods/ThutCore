@@ -80,7 +80,6 @@ public class PacketDataSync extends Packet
             }
             catch (final Exception e)
             {
-
                 ThutCore.LOGGER.error("Error loading data for {}, {}, {}, {}", id, tag, name, e);
             }
         }
