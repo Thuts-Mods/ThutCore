@@ -80,20 +80,9 @@ public class PacketDataSync extends Packet
             }
             catch (final Exception e)
             {
-                ThutCore.LOGGER.error("Error loading data for {}, {}, {}, {}", id, tag, name, e);
+                ThutCore.LOGGER.error("Error loading data for {}, {}, {}, {}, {}", id, uid, tag, name, e);
             }
         }
-    }
-
-    @Override
-    public void handleClient(Player player)
-    {
-        final Level world = player.level();
-        final Entity mob = EntityProvider.provider.getEntity(world, id);
-        if (mob == null) return;
-        final DataSync sync = SyncHandler.getData(mob);
-        if (type == 0) sync.update(this.data);
-        else sync.init(this.data);
     }
 
     @Override
@@ -114,6 +103,17 @@ public class PacketDataSync extends Packet
             }
             val.write(buf);
         }
+    }
+
+    @Override
+    public void handleClient(Player player)
+    {
+        final Level world = player.level();
+        final Entity mob = EntityProvider.provider.getEntity(world, id);
+        if (mob == null) return;
+        final DataSync sync = SyncHandler.getData(mob);
+        if (type == 0) sync.update(this.data);
+        else sync.init(this.data);
     }
 
     private final static Type<Packet> TYPE = new Type<>(ResourceLocation.parse("thutcore:data_sync"));
