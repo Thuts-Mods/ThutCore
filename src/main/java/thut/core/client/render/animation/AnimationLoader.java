@@ -245,12 +245,13 @@ public class AnimationLoader
             holder.setLoadedOffset(offset);
             holder.setLoadedScale(scale);
 
-            if (file.model.particles != null) model.getParts().values().forEach(part -> {
+            if (file.model.particles != null)
+            {
                 for (var m : file.model.particles)
-                {
-                    part.addPartRenderAdder(m);
-                }
-            });
+                    model.getParts().values().forEach(part -> {
+                        part.addPartRenderAdder(m);
+                    });
+            }
 
             if (renderer != null) synchronized (renderer)
             {
@@ -288,8 +289,7 @@ public class AnimationLoader
                 // Cleanup the animation stuff.
                 for (final Animation anim : animations)
                 {
-                    List<Animation> anims = renderer.getAnimations().get(anim.name);
-                    if (anims == null) renderer.getAnimations().put(anim.name, anims = new ArrayList<>());
+                    List<Animation> anims = renderer.getAnimations().computeIfAbsent(anim.name, k -> new ArrayList<>());
                     anims.add(anim);
                 }
                 for (final String from : mergedAnimations.keySet())
